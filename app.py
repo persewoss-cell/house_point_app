@@ -193,19 +193,22 @@ def api_list_accounts_cached():
     items.sort(key=lambda x: x["name"])
     return {"ok": True, "accounts": items}
 
+# ✅ order 포함 + order 기준 정렬(로그아웃해도 유지)
 @st.cache_data(ttl=300, show_spinner=False)
 def api_list_templates_cached():
-    docs = db.collection("templates").stream()
+    docs = list(db.collection("templates").stream())
     templates = []
     for d in docs:
-        t = d.to_dict()
+        t = d.to_dict() or {}
         if t.get("label"):
             templates.append({
                 "template_id": d.id,
                 "label": t.get("label"),
                 "kind": t.get("kind"),
-                "amount": int(t.get("amount", 0) or 0)
+                "amount": int(t.get("amount", 0) or 0),
+                "order": int(t.get("order", 999999) or 999999),
             })
+    templates.sort(key=lambda x: (x["order"], str(x["label"])))
     return {"ok": True, "templates": templates}
 
 # =========================
@@ -265,7 +268,7 @@ def api_add_tx(name, pin, memo, deposit, withdraw):
     @firestore.transactional
     def _do(transaction):
         snap = student_ref.get(transaction=transaction)
-        bal = int(snap.to_dict().get("balance", 0))
+        bal = int((snap.to_dict() or {}).get("balance", 0))
 
         # 일반 출금은 잔액 부족이면 불가
         if tx_type == "withdraw" and bal < withdraw:
@@ -305,7 +308,7 @@ def api_get_txs_by_student_id(student_id: str, limit=200):
 
     rows = []
     for d in q:
-        tx = d.to_dict()
+        tx = d.to_dict() or {}
         created_dt_utc = _to_utc_datetime(tx.get("created_at"))
         amt = int(tx.get("amount", 0) or 0)
         rows.append({
@@ -326,7 +329,7 @@ def api_get_balance(name, pin):
     student_doc = fs_auth_student(name, pin)
     if not student_doc:
         return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
-    data = student_doc.to_dict()
+    data = student_doc.to_dict() or {}
     return {"ok": True, "balance": int(data.get("balance", 0) or 0), "student_id": student_doc.id}
 
 # =========================
@@ -356,7 +359,7 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
         snap = db.collection("transactions").document(tid).get()
         if not snap.exists:
             continue
-        tx = snap.to_dict()
+        tx = snap.to_dict() or {}
         if tx.get("student_id") != student_id:
             continue
         tx_docs.append((tid, tx))
@@ -400,7 +403,7 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
         @firestore.transactional
         def _do_one(transaction):
             st_snap = student_ref.get(transaction=transaction)
-            bal = int(st_snap.to_dict().get("balance", 0))
+            bal = int((st_snap.to_dict() or {}).get("balance", 0))
             new_bal = bal + rollback_amount
             transaction.update(student_ref, {"balance": new_bal})
             transaction.set(rollback_ref, {
@@ -436,7 +439,7 @@ def api_savings_list_by_student_id(student_id: str):
     )
     out = []
     for d in docs:
-        s = d.to_dict()
+        s = d.to_dict() or {}
         out.append({
             "savings_id": d.id,
             "principal": int(s.get("principal", 0) or 0),
@@ -477,7 +480,7 @@ def api_savings_create(name, pin, principal, weeks):
     @firestore.transactional
     def _do(transaction):
         snap = student_ref.get(transaction=transaction)
-        bal = int(snap.to_dict().get("balance", 0))
+        bal = int((snap.to_dict() or {}).get("balance", 0))
         if principal > bal:
             raise ValueError("잔액보다 큰 원금은 가입할 수 없습니다.")
 
@@ -530,7 +533,7 @@ def api_savings_cancel(name, pin, savings_id):
         s_snap = savings_ref.get(transaction=transaction)
         if not s_snap.exists:
             raise ValueError("해당 적금을 찾지 못했습니다.")
-        s = s_snap.to_dict()
+        s = s_snap.to_dict() or {}
         if s.get("student_id") != student_doc.id:
             raise ValueError("권한이 없습니다.")
         if s.get("status") != "active":
@@ -540,7 +543,7 @@ def api_savings_cancel(name, pin, savings_id):
         weeks = int(s.get("weeks", 0) or 0)
 
         st_snap = student_ref.get(transaction=transaction)
-        bal = int(st_snap.to_dict().get("balance", 0))
+        bal = int((st_snap.to_dict() or {}).get("balance", 0))
         new_bal = bal + principal
 
         transaction.update(savings_ref, {"status": "canceled"})
@@ -582,7 +585,7 @@ def api_process_maturities(name, pin):
 
     matured = []
     for d in q:
-        s = d.to_dict()
+        s = d.to_dict() or {}
         m_dt = _to_utc_datetime(s.get("maturity_date"))
         if m_dt and m_dt <= now:
             matured.append((d.id, s))
@@ -603,7 +606,7 @@ def api_process_maturities(name, pin):
         @firestore.transactional
         def _do_one(transaction):
             st_snap = student_ref.get(transaction=transaction)
-            bal = int(st_snap.to_dict().get("balance", 0))
+            bal = int((st_snap.to_dict() or {}).get("balance", 0))
             new_bal = bal + amount
 
             transaction.update(student_ref, {"balance": new_bal})
@@ -643,7 +646,7 @@ def api_get_goal(name, pin):
     if not docs:
         return {"ok": True, "goal_amount": 0, "goal_date": ""}
 
-    g = docs[0].to_dict()
+    g = docs[0].to_dict() or {}
     return {
         "ok": True,
         "goal_amount": int(g.get("target_amount", 0) or 0),
@@ -716,7 +719,7 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
         @firestore.transactional
         def _do(transaction):
             snap = student_ref.get(transaction=transaction)
-            bal = int(snap.to_dict().get("balance", 0))
+            bal = int((snap.to_dict() or {}).get("balance", 0))
             new_bal = bal + amount
             transaction.update(student_ref, {"balance": new_bal})
             transaction.set(tx_ref, {
@@ -751,7 +754,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
         @firestore.transactional
         def _do(transaction):
             snap = student_ref.get(transaction=transaction)
-            bal = int(snap.to_dict().get("balance", 0))
+            bal = int((snap.to_dict() or {}).get("balance", 0))
             new_bal = bal - amount
             transaction.update(student_ref, {"balance": new_bal})
             transaction.set(tx_ref, {
@@ -768,12 +771,14 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
 
     return {"ok": True, "count": count}
 
-def api_admin_upsert_template(admin_pin, template_id, label, kind, amount):
+# ✅ order 저장까지 포함
+def api_admin_upsert_template(admin_pin, template_id, label, kind, amount, order):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
     label = (label or "").strip()
     kind = (kind or "").strip()
     amount = int(amount or 0)
+    order = int(order or 1)
 
     if not label:
         return {"ok": False, "error": "내역(label)이 필요합니다."}
@@ -781,11 +786,15 @@ def api_admin_upsert_template(admin_pin, template_id, label, kind, amount):
         return {"ok": False, "error": "종류는 deposit/withdraw만 가능합니다."}
     if amount <= 0:
         return {"ok": False, "error": "금액은 1 이상이어야 합니다."}
+    if order <= 0:
+        return {"ok": False, "error": "순서는 1 이상이어야 합니다."}
+
+    payload = {"label": label, "kind": kind, "amount": amount, "order": order}
 
     if template_id:
-        db.collection("templates").document(template_id).set({"label": label, "kind": kind, "amount": amount}, merge=True)
+        db.collection("templates").document(template_id).set(payload, merge=True)
     else:
-        db.collection("templates").document().set({"label": label, "kind": kind, "amount": amount})
+        db.collection("templates").document().set(payload)
 
     api_list_templates_cached.clear()
     return {"ok": True}
@@ -800,6 +809,62 @@ def api_admin_delete_template(admin_pin, template_id):
     api_list_templates_cached.clear()
     return {"ok": True}
 
+# ✅ 기존 템플릿에 order 없으면 자동 채우기(1회용)
+def api_admin_backfill_template_order(admin_pin: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+
+    docs = list(db.collection("templates").stream())
+    items = []
+    for d in docs:
+        t = d.to_dict() or {}
+        if t.get("label"):
+            items.append((d.id, t))
+
+    # label 기준으로 초기 order 부여(원하면 (kind, label)로 바꿔도 됨)
+    items.sort(key=lambda x: str(x[1].get("label", "")))
+
+    batch = db.batch()
+    for idx, (doc_id, t) in enumerate(items, start=1):
+        ref = db.collection("templates").document(doc_id)
+        cur = t.get("order", None)
+        if cur is None:
+            batch.set(ref, {"order": idx}, merge=True)
+    batch.commit()
+
+    api_list_templates_cached.clear()
+    return {"ok": True, "count": len(items)}
+
+# ✅ 위/아래 버튼용: 두 템플릿 order swap
+def api_admin_swap_template_order(admin_pin: str, id1: str, id2: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    if not id1 or not id2 or id1 == id2:
+        return {"ok": False, "error": "swap 대상이 올바르지 않습니다."}
+
+    ref1 = db.collection("templates").document(id1)
+    ref2 = db.collection("templates").document(id2)
+
+    @firestore.transactional
+    def _do(tx):
+        s1 = ref1.get(transaction=tx)
+        s2 = ref2.get(transaction=tx)
+        if not s1.exists or not s2.exists:
+            raise ValueError("템플릿을 찾지 못했습니다.")
+
+        o1 = int((s1.to_dict() or {}).get("order", 999999) or 999999)
+        o2 = int((s2.to_dict() or {}).get("order", 999999) or 999999)
+
+        tx.update(ref1, {"order": o2})
+        tx.update(ref2, {"order": o1})
+
+    try:
+        _do(db.transaction())
+        api_list_templates_cached.clear()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 # =========================
 # Session init
 # =========================
@@ -811,7 +876,6 @@ defaults = {
     "data": {},
     "last_maturity_check": {},
     "tpl_prev": {},
-
     "delete_confirm": False,
     "bulk_confirm": False,
     "bulk_w_confirm": False,
@@ -822,13 +886,9 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =========================
-# (중요) 관리자 일괄 지급/벌금 초기화 콜백
+# 관리자 일괄 지급/벌금 초기화 콜백
 # =========================
 def reset_admin_bulk(prefix: str):
-    """
-    Streamlit 위젯(key) 상태를 안전하게 초기화하기 위한 on_click 콜백.
-    - 위젯 렌더링 '이전' 시점(다음 rerun 시작)에 실행되므로 StreamlitAPIException 방지
-    """
     amt_key = f"{prefix}_amt"
     memo_key = f"{prefix}_memo"
     pick_key = f"{prefix}_pick"
@@ -839,8 +899,8 @@ def reset_admin_bulk(prefix: str):
     st.session_state[pick_key] = 0
     st.session_state[tpl_key] = "(직접 입력)"
     st.session_state[tpl_prev_key] = None
-    # memo는 유지하고 싶으면 주석 처리. 초기화까지 원하면 아래 줄 사용:
-    # st.session_state[memo_key] = st.session_state.get(memo_key, "")
+    # memo 유지(원하면 다음 줄 주석 해제)
+    # st.session_state[memo_key] = ""
 
 # =========================
 # 화면 유틸
@@ -1137,7 +1197,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # =========================
-# Templates (공용)
+# Templates (공용) - order 정렬 적용
 # =========================
 tpl_res = api_list_templates_cached()
 TEMPLATES = tpl_res.get("templates", []) if tpl_res.get("ok") else []
@@ -1216,27 +1276,73 @@ if st.session_state.admin_ok:
         admin_pin = ADMIN_PIN
 
         # ---- 템플릿 관리 ----
-        st.markdown("### 🧩 내역 템플릿 관리")
-        tpl_res2 = api_list_templates_cached()
-        templates = tpl_res2.get("templates", []) if tpl_res2.get("ok") else []
+        st.markdown("### 🧩 내역 템플릿 관리 (순서 고정: ⬆️⬇️ 버튼)")
 
         KIND_TO_KR = {"deposit": "입금", "withdraw": "출금"}
         KR_TO_KIND = {"입금": "deposit", "출금": "withdraw"}
 
-        def tpl_display(t):
-            kind_kr = "입금" if t["kind"] == "deposit" else "출금"
-            return f"{t['label']}[{kind_kr} {int(t['amount'])}]"
+        templates = api_list_templates_cached().get("templates", [])
 
+        # ✅ order 자동 채우기(없는 경우)
+        cfill1, cfill2 = st.columns([1, 2])
+        with cfill1:
+            if st.button("order 자동 채우기(1회)", key="tpl_backfill_btn", use_container_width=True):
+                res = api_admin_backfill_template_order(admin_pin)
+                if res.get("ok"):
+                    toast("order 초기화 완료!", icon="🧷")
+                    st.rerun()
+                else:
+                    st.error(res.get("error", "실패"))
+        with cfill2:
+            st.caption("※ 기존 템플릿에 order가 없으면 순서가 흔들립니다. 처음 1번만 눌러주세요.")
+
+        # ✅ 정렬 UI(위/아래)
         if templates:
-            show_rows = [{
-                "표시": tpl_display(t),
-                "내역": t["label"],
-                "종류": "입금" if t["kind"] == "deposit" else "출금",
-                "금액": int(t["amount"])
-            } for t in templates]
-            st.dataframe(pd.DataFrame(show_rows), use_container_width=True, hide_index=True)
+            st.caption("⬆️/⬇️을 누르면 해당 항목이 실제로 저장되어, 로그아웃해도 순서가 유지됩니다.")
+            st.divider()
+
+            header = st.columns([1, 5, 1.3, 1.3, 1.6])
+            header[0].markdown("**순서**")
+            header[1].markdown("**내역**")
+            header[2].markdown("**종류**")
+            header[3].markdown("**금액**")
+            header[4].markdown("**이동**")
+
+            for idx, t in enumerate(templates):
+                row = st.columns([1, 5, 1.3, 1.3, 0.8, 0.8])
+                row[0].write(int(t.get("order", 0)))
+                row[1].write(t.get("label", ""))
+                row[2].write("입금" if t.get("kind") == "deposit" else "출금")
+                row[3].write(int(t.get("amount", 0)))
+
+                up_disabled = (idx == 0)
+                down_disabled = (idx == len(templates) - 1)
+
+                if row[4].button("⬆️", key=f"tpl_up_{t['template_id']}", disabled=up_disabled, use_container_width=True):
+                    above = templates[idx - 1]
+                    res = api_admin_swap_template_order(admin_pin, t["template_id"], above["template_id"])
+                    if res.get("ok"):
+                        toast("위로 이동!", icon="⬆️")
+                        st.rerun()
+                    else:
+                        st.error(res.get("error", "실패"))
+
+                if row[5].button("⬇️", key=f"tpl_dn_{t['template_id']}", disabled=down_disabled, use_container_width=True):
+                    below = templates[idx + 1]
+                    res = api_admin_swap_template_order(admin_pin, t["template_id"], below["template_id"])
+                    if res.get("ok"):
+                        toast("아래로 이동!", icon="⬇️")
+                        st.rerun()
+                    else:
+                        st.error(res.get("error", "실패"))
+
+            st.divider()
         else:
             st.info("템플릿이 아직 없어요.")
+            st.divider()
+
+        # ---- 템플릿 추가/수정 ----
+        st.markdown("### ✏️ 템플릿 추가/수정")
 
         mode = st.radio("작업", ["추가", "수정"], horizontal=True, key="tpl_mode_setting")
 
@@ -1245,19 +1351,21 @@ if st.session_state.admin_ok:
         st.session_state.setdefault("tpl_label_setting", "")
         st.session_state.setdefault("tpl_kind_setting_kr", "입금")
         st.session_state.setdefault("tpl_amount_setting", 10)
+        st.session_state.setdefault("tpl_order_setting", 1)
 
         def _fill_tpl_form(t):
             st.session_state["tpl_edit_id_setting"] = t["template_id"]
             st.session_state["tpl_label_setting"] = t.get("label", "")
             st.session_state["tpl_kind_setting_kr"] = KIND_TO_KR.get(t.get("kind", "deposit"), "입금")
             st.session_state["tpl_amount_setting"] = int(t.get("amount", 10) or 10)
+            st.session_state["tpl_order_setting"] = int(t.get("order", 1) or 1)
 
         if mode == "수정" and templates:
-            labels = [tpl_display(t) for t in templates]
+            labels = [template_display_for_trade(t) for t in templates]
             pick = st.selectbox(
                 "수정할 템플릿 선택",
                 list(range(len(templates))),
-                format_func=lambda idx: labels[idx],
+                format_func=lambda i: labels[i],
                 key="tpl_pick_setting"
             )
             if st.session_state["tpl_pick_prev_setting"] != pick:
@@ -1266,13 +1374,17 @@ if st.session_state.admin_ok:
         elif mode == "추가":
             st.session_state["tpl_edit_id_setting"] = ""
             st.session_state["tpl_pick_prev_setting"] = None
+            st.session_state["tpl_order_setting"] = (int(templates[-1].get("order", 0)) + 1) if templates else 1
 
-        tcol1, tcol2 = st.columns(2)
+        tcol1, tcol2, tcol3 = st.columns(3)
         with tcol1:
             tpl_label = st.text_input("내역 이름", key="tpl_label_setting").strip()
-            tpl_amount = st.number_input("금액", min_value=1, step=1, key="tpl_amount_setting")
         with tcol2:
             tpl_kind_kr = st.selectbox("종류", ["입금", "출금"], key="tpl_kind_setting_kr")
+        with tcol3:
+            tpl_order = st.number_input("순서(작을수록 위)", min_value=1, step=1, key="tpl_order_setting")
+
+        tpl_amount = st.number_input("금액", min_value=1, step=1, key="tpl_amount_setting")
 
         if st.button("저장(추가/수정)", key="tpl_save_setting", use_container_width=True):
             if not tpl_label:
@@ -1280,21 +1392,20 @@ if st.session_state.admin_ok:
             else:
                 kind_eng = KR_TO_KIND[tpl_kind_kr]
                 tid = st.session_state.get("tpl_edit_id_setting", "") if mode == "수정" else ""
-                res = api_admin_upsert_template(admin_pin, tid, tpl_label, kind_eng, int(tpl_amount))
+                res = api_admin_upsert_template(admin_pin, tid, tpl_label, kind_eng, int(tpl_amount), int(tpl_order))
                 if res.get("ok"):
                     toast("템플릿 저장 완료!", icon="🧩")
-                    api_list_templates_cached.clear()
                     st.rerun()
                 else:
                     st.error(res.get("error", "템플릿 저장 실패"))
 
         st.caption("삭제")
         if templates:
-            del_labels = [tpl_display(t) for t in templates]
+            del_labels = [template_display_for_trade(t) for t in templates]
             del_pick = st.selectbox(
                 "삭제할 템플릿 선택",
                 list(range(len(templates))),
-                format_func=lambda idx: del_labels[idx],
+                format_func=lambda i: del_labels[i],
                 key="tpl_del_pick_setting"
             )
             del_id = templates[del_pick]["template_id"]
@@ -1310,7 +1421,6 @@ if st.session_state.admin_ok:
                         if res.get("ok"):
                             toast("삭제 완료!", icon="🗑️")
                             st.session_state["tpl_del_confirm_setting"] = False
-                            api_list_templates_cached.clear()
                             st.rerun()
                         else:
                             st.error(res.get("error", "삭제 실패"))
@@ -1323,13 +1433,9 @@ if st.session_state.admin_ok:
 
         # ---- 전체 일괄 지급/벌금: 템플릿 + 빠른 금액(누적) ----
         st.markdown("### 🎁 전체 일괄 지급/벌금 (템플릿 + 빠른 금액)")
-
         QUICK_AMOUNTS_ADMIN = [0, 10, 20, 50, 100, 200, 500, 1000]
 
         def admin_bulk_box(prefix: str, title: str, default_memo: str, template_kind: str):
-            """
-            template_kind: 'deposit' or 'withdraw'
-            """
             st.markdown(f"#### {title}")
 
             amt_key = f"{prefix}_amt"
@@ -1344,13 +1450,12 @@ if st.session_state.admin_ok:
             st.session_state.setdefault(tpl_key, "(직접 입력)")
             st.session_state.setdefault(tpl_prev_key, None)
 
-            # 템플릿(종류별 필터)
+            # ✅ 종류별 템플릿 필터 + 이미 order로 정렬된 TEMPLATES 사용
             kind_templates = [t for t in TEMPLATES if str(t.get("kind")) == template_kind]
             tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in kind_templates]
 
             sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
 
-            # 템플릿 변경 → 메모/금액 자동 세팅
             prev = st.session_state.get(tpl_prev_key)
             if sel != prev:
                 st.session_state[tpl_prev_key] = sel
@@ -1363,7 +1468,6 @@ if st.session_state.admin_ok:
 
             memo = st.text_input("내역(메모)", key=memo_key).strip()
 
-            # 빠른 금액(누적)
             def _apply():
                 v = int(st.session_state.get(pick_key, 0) or 0)
                 if v == 0:
@@ -1382,7 +1486,6 @@ if st.session_state.admin_ok:
 
             c1, c2 = st.columns([1, 1])
             with c1:
-                # ✅ 여기서 직접 session_state를 건드리지 않고 on_click 콜백 사용(에러 해결)
                 st.button(
                     "금액 초기화",
                     key=f"{prefix}_reset_btn",
