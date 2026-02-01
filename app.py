@@ -75,7 +75,7 @@ st.markdown(
         /* 모바일에서는 더 크게 */
         @media (max-width: 768px) {
             .app-title {
-                font-size: clamp(1.9rem, 7.5vw, 3.2rem);
+                font-size: clamp(2.05rem, 7.9vw, 3.3rem);
             }
         }
     </style>
@@ -1671,6 +1671,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
