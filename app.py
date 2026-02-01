@@ -74,12 +74,12 @@ st.markdown(
        (줄바꿈은 허용, 숨김/잘림 금지)
        ========================================= */
     h1 {
-        font-size: clamp(1.0rem, 3.4vw, 1.7rem) !important;
-        line-height: 1.15 !important;
+        font-size: clamp(0.95rem, 3.0vw, 1.6rem) !important;
+        line-height: 1.12 !important;
         white-space: normal !important;
         overflow: visible !important;
         word-break: keep-all !important;
-        margin-bottom: 0.6rem !important;
+        margin-bottom: 0.5rem !important;
     }
     </style>
     """,
@@ -1671,6 +1671,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
