@@ -17,7 +17,7 @@ ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
 # =========================
-# 모바일 UI CSS (유지)
+# 모바일 UI CSS
 # =========================
 st.markdown(
     """
@@ -42,6 +42,7 @@ st.markdown(
         color: #ffffff;
         border-color: #2563eb;
     }
+
     [data-testid="stDataFrame"] { overflow-x: auto; }
 
     .app-title {
@@ -60,7 +61,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
 st.markdown(f'<div class="app-title">🏦 {APP_TITLE}</div>', unsafe_allow_html=True)
 
 # =========================
@@ -391,7 +391,7 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
 
     valid.sort(key=lambda x: _tx_time(x[1]))
 
-    undone, total_delta = 0, 0
+    undone = 0
     for tid, tx in valid:
         amount = int(tx.get("amount", 0) or 0)
         rollback_amount = -amount
@@ -416,13 +416,12 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
 
         _do_one(db.transaction())
         undone += 1
-        total_delta += rollback_amount
 
     info_msg = None
     if blocked:
         info_msg = f"되돌리기 제외 {len(blocked)}건(적금/이미 되돌림 등)은 건너뛰었습니다."
 
-    return {"ok": True, "undone": undone, "delta": total_delta, "message": info_msg}
+    return {"ok": True, "undone": undone, "message": info_msg}
 
 # =========================
 # Savings
@@ -472,8 +471,7 @@ def api_savings_create(name, pin, principal, weeks):
     student_ref = db.collection("students").document(student_doc.id)
     savings_ref = db.collection("savings").document()
 
-    r = rate_by_weeks(weeks)
-    interest = round(principal * r)
+    interest = round(principal * rate_by_weeks(weeks))
     maturity_date = datetime.now(timezone.utc) + timedelta(days=weeks * 7)
 
     @firestore.transactional
@@ -646,7 +644,11 @@ def api_get_goal(name, pin):
         return {"ok": True, "goal_amount": 0, "goal_date": ""}
 
     g = docs[0].to_dict()
-    return {"ok": True, "goal_amount": int(g.get("target_amount", 0) or 0), "goal_date": str(g.get("goal_date", "") or "")}
+    return {
+        "ok": True,
+        "goal_amount": int(g.get("target_amount", 0) or 0),
+        "goal_date": str(g.get("goal_date", "") or "")
+    }
 
 def api_set_goal(name, pin, goal_amount, goal_date_str):
     goal_amount = int(goal_amount or 0)
@@ -725,13 +727,13 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
                 "memo": memo,
                 "created_at": firestore.SERVER_TIMESTAMP
             })
+
         _do(db.transaction())
         count += 1
 
     return {"ok": True, "count": count}
 
 def api_admin_bulk_withdraw(admin_pin, amount, memo):
-    # ✅ 잔액 부족이어도 적용(음수 허용)
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
     amount = int(amount or 0)
@@ -760,6 +762,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
                 "memo": memo,
                 "created_at": firestore.SERVER_TIMESTAMP
             })
+
         _do(db.transaction())
         count += 1
 
@@ -798,7 +801,7 @@ def api_admin_delete_template(admin_pin, template_id):
     return {"ok": True}
 
 # =========================
-# Session init (필요한 것만)
+# Session init
 # =========================
 defaults = {
     "logged_in": False,
@@ -808,6 +811,7 @@ defaults = {
     "data": {},
     "last_maturity_check": {},
     "tpl_prev": {},
+
     "delete_confirm": False,
     "bulk_confirm": False,
     "bulk_w_confirm": False,
@@ -816,6 +820,27 @@ defaults = {
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+# =========================
+# (중요) 관리자 일괄 지급/벌금 초기화 콜백
+# =========================
+def reset_admin_bulk(prefix: str):
+    """
+    Streamlit 위젯(key) 상태를 안전하게 초기화하기 위한 on_click 콜백.
+    - 위젯 렌더링 '이전' 시점(다음 rerun 시작)에 실행되므로 StreamlitAPIException 방지
+    """
+    amt_key = f"{prefix}_amt"
+    memo_key = f"{prefix}_memo"
+    pick_key = f"{prefix}_pick"
+    tpl_key = f"{prefix}_tpl"
+    tpl_prev_key = f"{prefix}_tpl_prev"
+
+    st.session_state[amt_key] = 0
+    st.session_state[pick_key] = 0
+    st.session_state[tpl_key] = "(직접 입력)"
+    st.session_state[tpl_prev_key] = None
+    # memo는 유지하고 싶으면 주석 처리. 초기화까지 원하면 아래 줄 사용:
+    # st.session_state[memo_key] = st.session_state.get(memo_key, "")
 
 # =========================
 # 화면 유틸
@@ -881,11 +906,7 @@ def render_tx_table(df_tx: pd.DataFrame):
         "withdraw": "출금",
         "balance_after": "총액"
     })
-    st.dataframe(
-        view[["내역", "입금", "출금", "총액", "날짜-시간"]],
-        use_container_width=True,
-        hide_index=True
-    )
+    st.dataframe(view[["내역", "입금", "출금", "총액", "날짜-시간"]], use_container_width=True, hide_index=True)
 
 def render_active_savings_list(savings: list[dict], name: str, pin: str, balance_now: int):
     active = [s for s in savings if str(s.get("status", "")).lower() == "active"]
@@ -976,7 +997,6 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
 
     goal_amount = int(g_amt)
     goal_date = g_date
-
     current_balance = int(balance)
 
     bonus = 0
@@ -1051,7 +1071,6 @@ with st.sidebar:
                     if res.get("ok"):
                         toast("삭제 완료!", icon="🗑️")
                         st.session_state.delete_confirm = False
-                        # ✅ 삭제된 계정 탭/데이터 즉시 정리
                         st.session_state.data.pop(new_name, None)
                         api_list_accounts_cached.clear()
                         st.rerun()
@@ -1063,7 +1082,7 @@ with st.sidebar:
                 st.rerun()
 
 # =========================
-# Main: 로그인/로그아웃 (요구사항 1)
+# Main: 로그인/로그아웃
 # =========================
 st.subheader("🔐 로그인")
 
@@ -1087,7 +1106,6 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.login_name = ADMIN_NAME
                 st.session_state.login_pin = ADMIN_PIN
-                # ✅ 로그인 성공 후 입력창 흔적 제거
                 st.session_state.pop("login_name_input", None)
                 st.session_state.pop("login_pin_input", None)
                 toast("관리자 모드 ON", icon="🔓")
@@ -1106,7 +1124,6 @@ if not st.session_state.logged_in:
                     toast("로그인 완료!", icon="✅")
                     st.rerun()
 else:
-    # ✅ 로그인 상태에서는 입력창을 아예 그리지 않음
     st.info(f"현재 로그인: {st.session_state.login_name}")
     if st.button("로그아웃", key="logout_btn", use_container_width=True):
         st.session_state.logged_in = False
@@ -1120,7 +1137,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # =========================
-# Templates
+# Templates (공용)
 # =========================
 tpl_res = api_list_templates_cached()
 TEMPLATES = tpl_res.get("templates", []) if tpl_res.get("ok") else []
@@ -1190,7 +1207,6 @@ if st.session_state.admin_ok:
             render_tx_table(df_tx)
 
             render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=int(a.get("balance",0)))
-
             st.markdown("### 🎯 목표저금(조회)")
             st.caption("관리자 탭에서는 학생 PIN이 없어 목표 설정/수정은 표시하지 않습니다.")
 
@@ -1199,10 +1215,10 @@ if st.session_state.admin_ok:
         st.subheader("⚙️ 설정")
         admin_pin = ADMIN_PIN
 
-        # ---- 템플릿 ----
+        # ---- 템플릿 관리 ----
         st.markdown("### 🧩 내역 템플릿 관리")
-        tpl_res = api_list_templates_cached()
-        templates = tpl_res.get("templates", []) if tpl_res.get("ok") else []
+        tpl_res2 = api_list_templates_cached()
+        templates = tpl_res2.get("templates", []) if tpl_res2.get("ok") else []
 
         KIND_TO_KR = {"deposit": "입금", "withdraw": "출금"}
         KR_TO_KIND = {"입금": "deposit", "출금": "withdraw"}
@@ -1305,21 +1321,49 @@ if st.session_state.admin_ok:
 
         st.divider()
 
-        # ---- 전체 일괄 지급/벌금 (요구사항 2: 빠른 금액 방식) ----
-        st.markdown("### 🎁 전체 일괄 지급/벌금 (빠른 금액)")
+        # ---- 전체 일괄 지급/벌금: 템플릿 + 빠른 금액(누적) ----
+        st.markdown("### 🎁 전체 일괄 지급/벌금 (템플릿 + 빠른 금액)")
 
         QUICK_AMOUNTS_ADMIN = [0, 10, 20, 50, 100, 200, 500, 1000]
 
-        def admin_quick_amount_box(prefix: str, title: str, default_memo: str):
+        def admin_bulk_box(prefix: str, title: str, default_memo: str, template_kind: str):
+            """
+            template_kind: 'deposit' or 'withdraw'
+            """
             st.markdown(f"#### {title}")
+
             amt_key = f"{prefix}_amt"
             memo_key = f"{prefix}_memo"
             pick_key = f"{prefix}_pick"
+            tpl_key = f"{prefix}_tpl"
+            tpl_prev_key = f"{prefix}_tpl_prev"
 
             st.session_state.setdefault(amt_key, 0)
             st.session_state.setdefault(memo_key, default_memo)
             st.session_state.setdefault(pick_key, 0)
+            st.session_state.setdefault(tpl_key, "(직접 입력)")
+            st.session_state.setdefault(tpl_prev_key, None)
 
+            # 템플릿(종류별 필터)
+            kind_templates = [t for t in TEMPLATES if str(t.get("kind")) == template_kind]
+            tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in kind_templates]
+
+            sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
+
+            # 템플릿 변경 → 메모/금액 자동 세팅
+            prev = st.session_state.get(tpl_prev_key)
+            if sel != prev:
+                st.session_state[tpl_prev_key] = sel
+                if sel != "(직접 입력)":
+                    base_label = sel.split("[")[0]
+                    tpl = TEMPLATE_BY_LABEL.get(base_label)
+                    if tpl and str(tpl.get("kind")) == template_kind:
+                        st.session_state[memo_key] = tpl["label"]
+                        st.session_state[amt_key] = int(tpl["amount"] or 0)
+
+            memo = st.text_input("내역(메모)", key=memo_key).strip()
+
+            # 빠른 금액(누적)
             def _apply():
                 v = int(st.session_state.get(pick_key, 0) or 0)
                 if v == 0:
@@ -1328,7 +1372,7 @@ if st.session_state.admin_ok:
                 st.session_state[amt_key] = int(st.session_state.get(amt_key, 0) or 0) + v
 
             st.radio(
-                "금액 선택",
+                "금액 선택(누적)",
                 QUICK_AMOUNTS_ADMIN,
                 horizontal=True,
                 key=pick_key,
@@ -1338,21 +1382,29 @@ if st.session_state.admin_ok:
 
             c1, c2 = st.columns([1, 1])
             with c1:
-                if st.button("금액 초기화", key=f"{prefix}_reset", use_container_width=True):
-                    st.session_state[amt_key] = 0
-                    st.session_state[pick_key] = 0
-                    st.rerun()
+                # ✅ 여기서 직접 session_state를 건드리지 않고 on_click 콜백 사용(에러 해결)
+                st.button(
+                    "금액 초기화",
+                    key=f"{prefix}_reset_btn",
+                    use_container_width=True,
+                    on_click=reset_admin_bulk,
+                    args=(prefix,)
+                )
             with c2:
                 st.number_input("선택 누적 금액", min_value=0, step=1, key=amt_key)
 
-            memo = st.text_input("내역(메모)", key=memo_key).strip()
             amount = int(st.session_state.get(amt_key, 0) or 0)
             return amount, memo
 
         colA, colB = st.columns(2)
 
         with colA:
-            bulk_amount, bulk_memo = admin_quick_amount_box("bulk_dep", "✅ 전체 일괄 지급(+)", "일괄 보상")
+            bulk_amount, bulk_memo = admin_bulk_box(
+                prefix="bulk_dep",
+                title="✅ 전체 일괄 지급(+)",
+                default_memo="일괄 보상",
+                template_kind="deposit"
+            )
 
             if st.button("지급 실행", key="bulk_run_setting", use_container_width=True):
                 st.session_state.bulk_confirm = True
@@ -1369,7 +1421,7 @@ if st.session_state.admin_ok:
                             if res.get("ok"):
                                 toast(f"일괄 지급 완료! ({res.get('count')}명)", icon="🎉")
                                 st.session_state.bulk_confirm = False
-                                st.session_state["bulk_dep_amt"] = 0
+                                reset_admin_bulk("bulk_dep")
                                 api_list_accounts_cached.clear()
                                 st.rerun()
                             else:
@@ -1380,7 +1432,12 @@ if st.session_state.admin_ok:
                             st.rerun()
 
         with colB:
-            bulk_w_amount, bulk_w_memo = admin_quick_amount_box("bulk_wd", "⚠️ 전체 일괄 벌금(-)", "일괄 벌금")
+            bulk_w_amount, bulk_w_memo = admin_bulk_box(
+                prefix="bulk_wd",
+                title="⚠️ 전체 일괄 벌금(-)",
+                default_memo="일괄 벌금",
+                template_kind="withdraw"
+            )
 
             if st.button("벌금 실행", key="bulkw_run_setting", use_container_width=True):
                 st.session_state.bulk_w_confirm = True
@@ -1397,7 +1454,7 @@ if st.session_state.admin_ok:
                             if res.get("ok"):
                                 toast(f"벌금 완료! (적용 {res.get('count')}명)", icon="⚠️")
                                 st.session_state.bulk_w_confirm = False
-                                st.session_state["bulk_wd_amt"] = 0
+                                reset_admin_bulk("bulk_wd")
                                 api_list_accounts_cached.clear()
                                 st.rerun()
                             else:
@@ -1515,7 +1572,6 @@ with sub1:
 
     def _apply_quick_amount():
         amt = int(st.session_state.get(f"quick_amt_{name}", 0) or 0)
-
         if amt == 0:
             st.session_state[dep_key] = 0
             st.session_state[wd_key] = 0
