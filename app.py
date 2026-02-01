@@ -22,12 +22,16 @@ ADMIN_NAME = "관리자"
 st.markdown(
     """
     <style>
+    /* 상단 여백 */
     section.main > div:first-child { padding-top: 2.6rem; }
     @media (max-width: 768px) {
         section.main > div:first-child { padding-top: 3.2rem; }
     }
+
+    /* 기본 컨테이너 */
     .block-container { padding-bottom: 2.0rem; }
 
+    /* radio → 버튼형 */
     div[role="radiogroup"] > label {
         background: #f3f4f6;
         padding: 6px 10px;
@@ -43,8 +47,36 @@ st.markdown(
         border-color: #2563eb;
     }
 
+    /* dataframe 가로 스크롤 */
     [data-testid="stDataFrame"] { overflow-x: auto; }
 
+    /* =========================
+       관리자 템플릿 ⬆️⬇️ 버튼 슬림화 (★추가★)
+       ========================= */
+
+    /* 버튼 자체를 작게 */
+    button[data-testid="baseButton-secondary"] {
+        padding: 0.15rem 0.35rem !important;
+        min-height: 1.6rem !important;
+        line-height: 1.1 !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* 컬럼 안 세로 여백 줄이기 */
+    div[data-testid="column"] {
+        padding-top: 0.15rem !important;
+        padding-bottom: 0.15rem !important;
+    }
+
+    /* 버튼이 들어간 column은 더 타이트하게 */
+    div[data-testid="column"] button {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* =========================
+       앱 제목
+       ========================= */
     .app-title {
         font-weight: 900;
         line-height: 1.18;
@@ -55,13 +87,19 @@ st.markdown(
         word-break: keep-all;
     }
     @media (max-width: 768px) {
-        .app-title { font-size: clamp(2.05rem, 7.9vw, 3.3rem); }
+        .app-title {
+            font-size: clamp(2.05rem, 7.9vw, 3.3rem);
+        }
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-st.markdown(f'<div class="app-title">🏦 {APP_TITLE}</div>', unsafe_allow_html=True)
+
+st.markdown(
+    f'<div class="app-title">🏦 {APP_TITLE}</div>',
+    unsafe_allow_html=True
+)
 
 # =========================
 # Firestore init
@@ -689,6 +727,7 @@ def api_set_goal(name, pin, goal_amount, goal_date_str):
 # =========================
 # Admin functions
 # =========================
+
 def api_admin_reset_pin(admin_pin, name, new_pin):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -701,6 +740,7 @@ def api_admin_reset_pin(admin_pin, name, new_pin):
     db.collection("students").document(doc.id).update({"pin": str(new_pin)})
     return {"ok": True}
 
+
 def api_admin_bulk_deposit(admin_pin, amount, memo):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -711,6 +751,7 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
 
     docs = list(db.collection("students").where(filter=FieldFilter("is_active", "==", True)).stream())
     count = 0
+
     for d in docs:
         student_id = d.id
         student_ref = db.collection("students").document(student_id)
@@ -721,6 +762,7 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
             snap = student_ref.get(transaction=transaction)
             bal = int((snap.to_dict() or {}).get("balance", 0))
             new_bal = bal + amount
+
             transaction.update(student_ref, {"balance": new_bal})
             transaction.set(tx_ref, {
                 "student_id": student_id,
@@ -736,7 +778,9 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
 
     return {"ok": True, "count": count}
 
+
 def api_admin_bulk_withdraw(admin_pin, amount, memo):
+    # ✅ 잔액 부족이어도 적용(음수 허용)
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
     amount = int(amount or 0)
@@ -746,6 +790,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
 
     docs = list(db.collection("students").where(filter=FieldFilter("is_active", "==", True)).stream())
     count = 0
+
     for d in docs:
         student_id = d.id
         student_ref = db.collection("students").document(student_id)
@@ -756,6 +801,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
             snap = student_ref.get(transaction=transaction)
             bal = int((snap.to_dict() or {}).get("balance", 0))
             new_bal = bal - amount
+
             transaction.update(student_ref, {"balance": new_bal})
             transaction.set(tx_ref, {
                 "student_id": student_id,
@@ -771,10 +817,12 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
 
     return {"ok": True, "count": count}
 
-# ✅ order 저장까지 포함
+
+# ✅ order 저장 포함
 def api_admin_upsert_template(admin_pin, template_id, label, kind, amount, order):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+
     label = (label or "").strip()
     kind = (kind or "").strip()
     amount = int(amount or 0)
@@ -799,17 +847,21 @@ def api_admin_upsert_template(admin_pin, template_id, label, kind, amount, order
     api_list_templates_cached.clear()
     return {"ok": True}
 
+
 def api_admin_delete_template(admin_pin, template_id):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+
     template_id = (template_id or "").strip()
     if not template_id:
         return {"ok": False, "error": "template_id가 필요합니다."}
+
     db.collection("templates").document(template_id).delete()
     api_list_templates_cached.clear()
     return {"ok": True}
 
-# ✅ 기존 템플릿에 order 없으면 자동 채우기(1회용)
+
+# ✅ (선택) order 없는 문서에만 "초기 order" 채우기
 def api_admin_backfill_template_order(admin_pin: str):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -821,21 +873,58 @@ def api_admin_backfill_template_order(admin_pin: str):
         if t.get("label"):
             items.append((d.id, t))
 
-    # label 기준으로 초기 order 부여(원하면 (kind, label)로 바꿔도 됨)
+    # label 기준으로 초기값 부여
     items.sort(key=lambda x: str(x[1].get("label", "")))
 
     batch = db.batch()
+    wrote = 0
     for idx, (doc_id, t) in enumerate(items, start=1):
         ref = db.collection("templates").document(doc_id)
-        cur = t.get("order", None)
-        if cur is None:
+        if t.get("order", None) is None:
             batch.set(ref, {"order": idx}, merge=True)
+            wrote += 1
+    batch.commit()
+
+    api_list_templates_cached.clear()
+    return {"ok": True, "count": wrote}
+
+
+# ✅ ★진짜 해결 버튼용: 전체 템플릿 order를 1..N으로 "재정렬/재번호"
+#    999999 문제, 섞여있는 order 문제를 한 번에 정리
+def api_admin_normalize_template_order(admin_pin: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+
+    docs = list(db.collection("templates").stream())
+    items = []
+    for d in docs:
+        t = d.to_dict() or {}
+        if not t.get("label"):
+            continue
+        items.append({
+            "template_id": d.id,
+            "label": str(t.get("label", "")),
+            "kind": str(t.get("kind", "")),
+            "amount": int(t.get("amount", 0) or 0),
+            "order": int(t.get("order", 999999) or 999999),
+        })
+
+    # 현재 상태에서 가장 자연스러운 기준:
+    # (order 오름차순) → (label 오름차순)
+    items.sort(key=lambda x: (x["order"], x["label"]))
+
+    batch = db.batch()
+    for idx, it in enumerate(items, start=1):
+        ref = db.collection("templates").document(it["template_id"])
+        batch.set(ref, {"order": idx}, merge=True)
     batch.commit()
 
     api_list_templates_cached.clear()
     return {"ok": True, "count": len(items)}
 
+
 # ✅ 위/아래 버튼용: 두 템플릿 order swap
+#    ★ o1==o2(999999끼리)라도 "무조건 움직이게" 처리
 def api_admin_swap_template_order(admin_pin: str, id1: str, id2: str):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -854,6 +943,13 @@ def api_admin_swap_template_order(admin_pin: str, id1: str, id2: str):
 
         o1 = int((s1.to_dict() or {}).get("order", 999999) or 999999)
         o2 = int((s2.to_dict() or {}).get("order", 999999) or 999999)
+
+        # ✅ 같은 값이면 swap해도 변화가 없으니,
+        #    "차이를 만들어서" 움직이게 만든 뒤 return
+        if o1 == o2:
+            # id1을 살짝 위(또는 아래)로 이동시킬 수 있도록 값 조정
+            tx.update(ref1, {"order": o2 - 1 if o2 > 1 else 1})
+            return
 
         tx.update(ref1, {"order": o2})
         tx.update(ref2, {"order": o1})
@@ -1281,27 +1377,45 @@ if st.session_state.admin_ok:
         KIND_TO_KR = {"deposit": "입금", "withdraw": "출금"}
         KR_TO_KIND = {"입금": "deposit", "출금": "withdraw"}
 
-        templates = api_list_templates_cached().get("templates", [])
+        tpl_res = api_list_templates_cached()
+        templates = tpl_res.get("templates", []) if tpl_res.get("ok") else []
 
-        # ✅ order 자동 채우기(없는 경우)
-        cfill1, cfill2 = st.columns([1, 2])
-        with cfill1:
+        # ✅ 항상 같은 기준으로 정렬해서 "위/아래" 대상이 흔들리지 않게 고정
+        templates = sorted(
+            templates,
+            key=lambda t: (int(t.get("order", 999999) or 999999), str(t.get("label", "")))
+        )
+
+        # ✅ 버튼 영역: (1) order 없는 것만 채우기 (2) 전체 재정렬(1~N으로 정리)
+        b1, b2, b3 = st.columns([1, 1, 2])
+        with b1:
             if st.button("order 자동 채우기(1회)", key="tpl_backfill_btn", use_container_width=True):
                 res = api_admin_backfill_template_order(admin_pin)
                 if res.get("ok"):
                     toast("order 초기화 완료!", icon="🧷")
+                    api_list_templates_cached.clear()
                     st.rerun()
                 else:
                     st.error(res.get("error", "실패"))
-        with cfill2:
-            st.caption("※ 기존 템플릿에 order가 없으면 순서가 흔들립니다. 처음 1번만 눌러주세요.")
+        with b2:
+            if st.button("order 전체 재정렬(999999 정리)", key="tpl_normalize_btn", use_container_width=True):
+                res = api_admin_normalize_template_order(admin_pin)
+                if res.get("ok"):
+                    toast("order 재정렬 완료!", icon="🧹")
+                    api_list_templates_cached.clear()
+                    st.rerun()
+                else:
+                    st.error(res.get("error", "실패"))
+        with b3:
+            st.caption("※ ⬆️⬇️이 안 움직이거나 999999가 보이면 ‘order 전체 재정렬’을 1번 누르면 1~N으로 정리됩니다.")
+
+        st.divider()
 
         # ✅ 정렬 UI(위/아래)
         if templates:
-            st.caption("⬆️/⬇️을 누르면 해당 항목이 실제로 저장되어, 로그아웃해도 순서가 유지됩니다.")
-            st.divider()
+            st.caption("⬆️/⬇️을 누르면 해당 항목의 순서(order)가 저장되어 로그아웃해도 유지됩니다.")
 
-            header = st.columns([1, 5, 1.3, 1.3, 1.6])
+            header = st.columns([0.8, 5, 1.2, 1.2, 1.1])
             header[0].markdown("**순서**")
             header[1].markdown("**내역**")
             header[2].markdown("**종류**")
@@ -1309,11 +1423,11 @@ if st.session_state.admin_ok:
             header[4].markdown("**이동**")
 
             for idx, t in enumerate(templates):
-                row = st.columns([1, 5, 1.3, 1.3, 0.8, 0.8])
-                row[0].write(int(t.get("order", 0)))
+                row = st.columns([0.8, 5, 1.2, 1.2, 0.55, 0.55])
+                row[0].write(int(t.get("order", 999999) or 999999))
                 row[1].write(t.get("label", ""))
                 row[2].write("입금" if t.get("kind") == "deposit" else "출금")
-                row[3].write(int(t.get("amount", 0)))
+                row[3].write(int(t.get("amount", 0) or 0))
 
                 up_disabled = (idx == 0)
                 down_disabled = (idx == len(templates) - 1)
@@ -1323,6 +1437,7 @@ if st.session_state.admin_ok:
                     res = api_admin_swap_template_order(admin_pin, t["template_id"], above["template_id"])
                     if res.get("ok"):
                         toast("위로 이동!", icon="⬆️")
+                        api_list_templates_cached.clear()
                         st.rerun()
                     else:
                         st.error(res.get("error", "실패"))
@@ -1332,6 +1447,7 @@ if st.session_state.admin_ok:
                     res = api_admin_swap_template_order(admin_pin, t["template_id"], below["template_id"])
                     if res.get("ok"):
                         toast("아래로 이동!", icon="⬇️")
+                        api_list_templates_cached.clear()
                         st.rerun()
                     else:
                         st.error(res.get("error", "실패"))
@@ -1838,3 +1954,4 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
