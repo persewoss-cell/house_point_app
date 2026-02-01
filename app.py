@@ -63,7 +63,7 @@ st.markdown(
     }
 
 # =========================
-# 모바일 UI CSS (제목/데이터프레임 포함)
+# 모바일 UI CSS (제목/레이아웃 안정 버전)
 # =========================
 st.markdown(
     """
@@ -115,14 +115,12 @@ st.markdown(
     }
 
     /* =========================================
-       st.header / st.title 제목 크기 제어
-       - PC / 모바일 분리 대응
+       제목(st.header / st.title)
        ========================================= */
     div[data-testid="stMarkdownContainer"] h1,
     div[data-testid="stMarkdownContainer"] h2,
     div[data-testid="stMarkdownContainer"] h1 span,
     div[data-testid="stMarkdownContainer"] h2 span {
-        /* PC 기본 */
         font-size: clamp(1.25rem, 3.5vw, 2.10rem) !important;
         line-height: 1.18 !important;
         white-space: normal !important;
@@ -131,7 +129,6 @@ st.markdown(
         margin-bottom: 0.7rem !important;
     }
 
-    /* ✅ 모바일에서는 제목을 더 크게 강제 */
     @media (max-width: 768px) {
         div[data-testid="stMarkdownContainer"] h1,
         div[data-testid="stMarkdownContainer"] h2,
@@ -1731,6 +1728,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
