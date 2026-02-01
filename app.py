@@ -22,6 +22,22 @@ st.markdown("""
 
 /* ✅ 모바일에서 columns가 세로로 무너지지 않게: 가로 스크롤로 전환 */
 
+/* radio 버튼을 '버튼'처럼 보이게 */
+div[role="radiogroup"] > label {
+  background: #f3f4f6;
+  padding: 6px 10px;
+  border-radius: 10px;
+  margin-right: 6px;
+  border: 1px solid #ddd;
+  font-size: 0.85rem;
+}
+
+div[role="radiogroup"] > label:has(input:checked) {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
 /* 빠른 버튼은 더 컴팩트 */
 .quick-row .stButton button{
   width: auto !important;
@@ -1463,40 +1479,27 @@ with sub1:
 
     st.caption("⚡ 빠른 금액")
 
-    AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
+    QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
 
-    qc1, qc2, qc3, qc4 = st.columns([2.4, 1.2, 1.2, 1.6])
+    quick_amt = st.radio(
+        "금액 선택",
+        QUICK_AMOUNTS,
+        horizontal=True,
+        key=f"quick_amt_{name}"
+    )
 
-    with qc1:
-        quick_amt = st.selectbox(
-            "금액 선택",
-            AMOUNTS,
-            index=0,
-            key=f"quick_amt_{name}"
-        )
+    q1, q2, q3 = st.columns(3)
 
-    with qc2:
-        if st.button(
-            "+추가",
-            key=f"quick_plus_{name}",
-            use_container_width=True
-        ):
+    with q1:
+        if st.button("+추가", key=f"quick_plus_{name}", use_container_width=True):
             _add_amount(int(quick_amt), True)
 
-    with qc3:
-        if st.button(
-            "-추가",
-            key=f"quick_minus_{name}",
-            use_container_width=True
-        ):
+    with q2:
+        if st.button("-추가", key=f"quick_minus_{name}", use_container_width=True):
             _add_amount(int(quick_amt), False)
 
-    with qc4:
-        if st.button(
-            "금액 초기화",
-            key=f"quick_reset_{name}",
-            use_container_width=True
-        ):
+    with q3:
+        if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
             _reset_amounts()
 
     c_reset1, c_reset2 = st.columns([1, 3])
@@ -1638,5 +1641,6 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
