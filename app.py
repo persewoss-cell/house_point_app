@@ -1460,14 +1460,14 @@ with sub1:
 
     st.text_input("내역", key=memo_key)
 
-    # ✅ 빠른 금액(캡쳐처럼 타일) : 누르는 순간 바로 입금/출금 칸에 반영
     st.caption("⚡ 빠른 금액")
 
-    QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
+    # 0 맨 앞, 100은 끝으로 보내서(대부분 모바일에서) 아래줄로 내려가게 유도
+    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
 
     mode_key = f"quick_mode_{name}"
     if mode_key not in st.session_state:
-        st.session_state[mode_key] = "입금(+)"  # 기본값
+        st.session_state[mode_key] = "입금(+)"
 
     st.radio(
         "적용",
@@ -1477,15 +1477,25 @@ with sub1:
     )
 
     def _apply_quick_amount():
-        amt = int(st.session_state.get(f"quick_amt_{name}", 0) or 0)  # 항상 +값(10/20/...)
+        amt = int(st.session_state.get(f"quick_amt_{name}", 0) or 0)
+
+        # 0을 누르면 초기화처럼 동작
+        if amt == 0:
+            st.session_state[dep_key] = 0
+            st.session_state[wd_key] = 0
+            return
+
+        # ✅ 누를 때마다 누적 합산
         if st.session_state[mode_key] == "입금(+)":
-            st.session_state[dep_key] = amt
+            st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
             st.session_state[wd_key] = 0
         else:
-            st.session_state[wd_key] = amt
+            st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
             st.session_state[dep_key] = 0
 
     def _fmt_amt(x):
+        if x == 0:
+            return "0"
         return f"-{x}" if st.session_state[mode_key] == "출금(-)" else f"{x}"
 
     st.radio(
@@ -1635,6 +1645,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
