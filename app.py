@@ -86,6 +86,10 @@ st.markdown(
         word-break: keep-all !important;
         margin-bottom: 0.5rem !important;
     }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # =========================
 # 상단 제목 표시 (가장 안정적인 방식)
@@ -1672,6 +1676,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
