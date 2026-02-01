@@ -1460,57 +1460,49 @@ with sub1:
 
     st.text_input("내역", key=memo_key)
 
-    # ✅ 빠른 입금/출금: 한 줄 + 버튼/글자 작게
-    AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
+    # ✅ 빠른 금액(캡쳐처럼 타일) : 누르는 순간 바로 입금/출금 칸에 반영
+    st.caption("⚡ 빠른 금액")
 
-    def _add_amount(amount: int, is_deposit: bool):
-        if is_deposit:
-            st.session_state[dep_key] = int(st.session_state.get(dep_key, 0)) + amount
+    QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
+
+    mode_key = f"quick_mode_{name}"
+    if mode_key not in st.session_state:
+        st.session_state[mode_key] = "입금(+)"  # 기본값
+
+    st.radio(
+        "적용",
+        ["입금(+)", "출금(-)"],
+        horizontal=True,
+        key=mode_key
+    )
+
+    def _apply_quick_amount():
+        amt = int(st.session_state.get(f"quick_amt_{name}", 0) or 0)  # 항상 +값(10/20/...)
+        if st.session_state[mode_key] == "입금(+)":
+            st.session_state[dep_key] = amt
             st.session_state[wd_key] = 0
         else:
-            st.session_state[wd_key] = int(st.session_state.get(wd_key, 0)) + amount
+            st.session_state[wd_key] = amt
             st.session_state[dep_key] = 0
-        st.rerun()
 
-    def _reset_amounts():
+    def _fmt_amt(x):
+        return f"-{x}" if st.session_state[mode_key] == "출금(-)" else f"{x}"
+
+    st.radio(
+        "금액 선택",
+        QUICK_AMOUNTS,
+        horizontal=True,
+        key=f"quick_amt_{name}",
+        format_func=_fmt_amt,
+        on_change=_apply_quick_amount
+    )
+
+    if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
         st.session_state[dep_key] = 0
         st.session_state[wd_key] = 0
         st.rerun()
 
-    st.caption("⚡ 빠른 입금 / 출금")
-
-    QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
-
-    # ---- 빠른 입금 버튼(한 줄)
-    st.caption("⚡ 빠른 입금 (+)")
-    c0, c1, c2, c3, c4, c5, c6, c_reset = st.columns([1,1,1,1,1,1,1,1.3])
-    for col, amt in zip([c0,c1,c2,c3,c4,c5,c6], QUICK_AMOUNTS):
-        with col:
-            if st.button(f"+{amt}", key=f"qdep_{amt}_{name}", use_container_width=True):
-                st.session_state[dep_key] = int(st.session_state.get(dep_key, 0)) + int(amt)
-                st.session_state[wd_key] = 0
-                st.rerun()
-    with c_reset:
-        if st.button("초기화", key=f"qreset_dep_{name}", use_container_width=True):
-            st.session_state[dep_key] = 0
-            st.session_state[wd_key] = 0
-            st.rerun()
-
-    # ---- 빠른 출금 버튼(한 줄)
-    st.caption("⚡ 빠른 출금 (-)")
-    d0, d1, d2, d3, d4, d5, d6, d_reset = st.columns([1,1,1,1,1,1,1,1.3])
-    for col, amt in zip([d0,d1,d2,d3,d4,d5,d6], QUICK_AMOUNTS):
-        with col:
-            if st.button(f"-{amt}", key=f"qwd_{amt}_{name}", use_container_width=True):
-                st.session_state[wd_key] = int(st.session_state.get(wd_key, 0)) + int(amt)
-                st.session_state[dep_key] = 0
-                st.rerun()
-    with d_reset:
-        if st.button("초기화", key=f"qreset_wd_{name}", use_container_width=True):
-            st.session_state[dep_key] = 0
-            st.session_state[wd_key] = 0
-            st.rerun()
-
+    # ✅ 입금/출금 입력칸 (유지)
     cA, cB = st.columns(2)
     with cA:
         st.number_input("입금", min_value=0, step=1, key=dep_key)
@@ -1643,6 +1635,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
