@@ -84,7 +84,11 @@ st.markdown(
         text-overflow: ellipsis;
     }
     @media (max-width: 768px){
+        /* 모바일에서 columns가 세로로 쌓여 가독성이 깨지는 이슈가 있어,
+           아래는 표 텍스트 자체만 약간 더 또렷하게(간단 모드 UI는 코드에서 제공) */
+        .tpl-cell { padding: 6px 6px; font-size: 1.02rem; line-height: 1.18; }
         .tpl-label{ white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow:hidden; }
+        .tpl-sub { font-size: 0.92rem; line-height: 1.12; }
     }
     .tpl-sub {
         color:#666;
@@ -107,6 +111,23 @@ st.markdown(
         padding: 0.35rem 0.6rem !important;
         min-height: 2.0rem !important;
     }
+
+    /* ✅ 간단 모드(모바일용) 리스트 */
+    .tpl-simple {
+        border: 1px solid #eee;
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #fafafa;
+        margin-top: 8px;
+    }
+    .tpl-simple .item {
+        padding: 8px 0;
+        border-bottom: 1px dashed #e6e6e6;
+    }
+    .tpl-simple .item:last-child { border-bottom: none; }
+    .tpl-simple .idx { font-weight: 900; margin-right: 8px; }
+    .tpl-simple .lab { font-weight: 800; }
+    .tpl-simple .meta { color:#666; font-size: 0.92rem; margin-top: 2px; }
 
     </style>
     """,
@@ -203,6 +224,22 @@ def _is_savings_memo(memo: str) -> bool:
     memo = str(memo or "")
     return ("적금 가입" in memo) or ("적금 해지" in memo) or ("적금 만기" in memo)
 
+def render_asset_summary(balance_now: int, savings_list: list[dict]):
+    sv_total = sum(
+        int(s.get("principal", 0) or 0)
+        for s in (savings_list or [])
+        if str(s.get("status", "")).lower().strip() == "active"
+    )
+    asset_total = int(balance_now) + int(sv_total)
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("내 자산", f"{asset_total}")
+    with c2:
+        st.metric("통장 잔액", f"{int(balance_now)}")
+    with c3:
+        st.metric("적금 총액", f"{int(sv_total)}")
+
 # =========================
 # Firestore helpers
 # =========================
@@ -262,7 +299,6 @@ def api_list_templates_cached():
                 "amount": int(t.get("amount", 0) or 0),
                 "order": int(t.get("order", 999999) or 999999),
             })
-    # ✅ order 우선, 그 다음 label
     templates.sort(key=lambda x: (int(x.get("order", 999999)), str(x.get("label", ""))))
     return {"ok": True, "templates": templates}
 
@@ -898,7 +934,12 @@ def api_admin_normalize_template_order(admin_pin: str):
         if t.get("label"):
             items.append((d.id, t))
 
-    items.sort(key=lambda x: (int((x[1] or {}).get("order", 999999) or 999999), str((x[1] or {}).get("label", ""))))
+    items.sort(
+        key=lambda x: (
+            int((x[1] or {}).get("order", 999999) or 999999),
+            str((x[1] or {}).get("label", ""))
+        )
+    )
 
     batch = db.batch()
     for idx, (doc_id, _) in enumerate(items, start=1):
@@ -944,6 +985,7 @@ defaults = {
     "undo_mode": False,
     "tpl_sort_mode": False,
     "tpl_work_ids": [],
+    "tpl_mobile_sort_ui": False,
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -1296,11 +1338,23 @@ if st.session_state.admin_ok:
     tab_labels = ["⚙️ 설정", "📒 전체통장"] + [f"👤 {a['name']}" for a in filtered]
     tabs = st.tabs(tab_labels)
 
+    # -------------------------
+    # 📒 전체통장(사람별 통장 내역)
+    # (요청사항 2) expander 제목/내용을 사용자 화면처럼 "내 자산/통장 잔액/적금 총액"으로 표시
+    # -------------------------
     with tabs[1]:
         st.subheader("📒 전체통장(사람별 통장 내역)")
         for a in filtered:
             nm, sid = a["name"], a["student_id"]
-            with st.expander(f"👤 {nm} (현재잔액 {int(a.get('balance',0))})", expanded=False):
+            sres = api_savings_list_by_student_id(sid)
+            savings = sres.get("savings", []) if sres.get("ok") else []
+            sv_total = savings_active_total(savings)
+            bal_now = int(a.get("balance", 0) or 0)
+            asset_total = bal_now + sv_total
+
+            with st.expander(f"👤 {nm}  |  내자산 {asset_total} · 잔액 {bal_now} · 적금 {sv_total}", expanded=False):
+                render_asset_summary(bal_now, savings)
+                st.markdown("### 📒 통장내역")
                 txr = api_get_txs_by_student_id(sid, limit=120)
                 if not txr.get("ok"):
                     st.error(txr.get("error", "내역을 불러오지 못했어요."))
@@ -1312,6 +1366,9 @@ if st.session_state.admin_ok:
                         df_tx = df_tx.sort_values("created_at_utc", ascending=False)
                         render_tx_table(df_tx)
 
+    # -------------------------
+    # (요청사항 3) 각 사용자별 탭에서도 동일 요약(내자산/통장잔액/적금총액)
+    # -------------------------
     for i, a in enumerate(filtered, start=2):
         with tabs[i]:
             nm, sid = a["name"], a["student_id"]
@@ -1321,18 +1378,17 @@ if st.session_state.admin_ok:
 
             sres = api_savings_list_by_student_id(sid)
             savings = sres.get("savings", []) if sres.get("ok") else []
-            sv_total = savings_active_total(savings)
+            bal_now = int(a.get("balance", 0) or 0)
 
             st.subheader(f"👤 {nm}")
-            st.write(f"### 현재잔액: **{int(a.get('balance', 0))} 포인트**")
-            st.write(f"### 적금총액: **{sv_total} 포인트**")
+            render_asset_summary(bal_now, savings)
 
             st.markdown("### 📒 통장내역")
             if not df_tx.empty:
                 df_tx = df_tx.sort_values("created_at_utc", ascending=False)
             render_tx_table(df_tx)
 
-            render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=int(a.get("balance",0)))
+            render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=bal_now)
 
             st.markdown("### 🎯 목표저금(조회)")
             st.caption("관리자 탭에서는 학생 PIN이 없어 목표 설정/수정은 표시하지 않습니다.")
@@ -1495,9 +1551,12 @@ if st.session_state.admin_ok:
         st.divider()
 
         # -------------------------------------------------
-        # 2) ✅ 템플릿 정렬/관리 (촘촘 Row + 저장 1번)
+        # 2) ✅ 템플릿 정렬/관리
+        # (요청사항 1) 모바일에서 columns가 세로로 쌓여 보기 나빠지는 문제 해결:
+        #   - "간단 모드(모바일용)" UI를 추가 (선택 → 위/아래 이동)
+        #   - PC에서는 기존 촘촘 표 + ⬆⬇ 유지
         # -------------------------------------------------
-        st.markdown("### 🧩 내역 템플릿 순서 정렬 (촘촘 + 저장 1번)")
+        st.markdown("### 🧩 내역 템플릿 순서 정렬 (PC촘촘 / 모바일간단모드)")
 
         tpl_res2 = api_list_templates_cached()
         templates = tpl_res2.get("templates", []) if tpl_res2.get("ok") else []
@@ -1513,8 +1572,8 @@ if st.session_state.admin_ok:
             if (not st.session_state.tpl_work_ids) or (set(st.session_state.tpl_work_ids) != set(cur_ids)):
                 st.session_state.tpl_work_ids = cur_ids
 
-        cA, cB, cC = st.columns([1.1, 1.1, 1.8])
-        with cA:
+        topA, topB, topC, topD = st.columns([1.1, 1.1, 1.4, 1.6])
+        with topA:
             if st.button(
                 "정렬모드 ON" if not st.session_state.tpl_sort_mode else "정렬모드 OFF",
                 key="tpl_sort_toggle",
@@ -1525,7 +1584,7 @@ if st.session_state.admin_ok:
                     st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
                 st.rerun()
 
-        with cB:
+        with topB:
             if st.button("order 채우기(1회)", key="tpl_backfill_btn2", use_container_width=True):
                 res = api_admin_backfill_template_order(admin_pin)
                 if res.get("ok"):
@@ -1536,7 +1595,7 @@ if st.session_state.admin_ok:
                 else:
                     st.error(res.get("error", "실패"))
 
-        with cC:
+        with topC:
             if st.button("order 전체 재정렬", key="tpl_normalize_btn2", use_container_width=True):
                 res = api_admin_normalize_template_order(admin_pin)
                 if res.get("ok"):
@@ -1547,66 +1606,146 @@ if st.session_state.admin_ok:
                 else:
                     st.error(res.get("error", "실패"))
 
+        with topD:
+            st.session_state.tpl_mobile_sort_ui = st.checkbox(
+                "간단 모드(모바일용)",
+                value=bool(st.session_state.tpl_mobile_sort_ui),
+                key="tpl_mobile_sort_ui_chk",
+                help="모바일에서 표가 세로로 쌓여 보이는 문제를 피하기 위한 정렬 UI입니다."
+            )
+
         if st.session_state.tpl_sort_mode:
-            st.caption("✅ ⬆️⬇️은 화면에서만 즉시 이동 → 마지막에 ‘저장(한 번에)’ 1번 누르면 DB 반영")
+            st.caption("✅ 이동은 화면에서만 즉시 반영 → 마지막에 ‘저장(한 번에)’ 1번 누르면 DB 반영")
 
         work_ids = st.session_state.tpl_work_ids
         if not work_ids:
             st.info("템플릿이 아직 없어요.")
         else:
-            # 헤더(엑셀 느낌)
-            head = st.columns([0.7, 5.2, 2.2, 1.4], vertical_alignment="center")
-            head[0].markdown("<div class='tpl-head'>순서</div>", unsafe_allow_html=True)
-            head[1].markdown("<div class='tpl-head'>내역</div>", unsafe_allow_html=True)
-            head[2].markdown("<div class='tpl-head'>종류·금액</div>", unsafe_allow_html=True)
-            head[3].markdown("<div class='tpl-head'>이동</div>", unsafe_allow_html=True)
+            # ---- 간단 모드(모바일용) ----
+            if st.session_state.tpl_mobile_sort_ui:
+                options = list(range(len(work_ids)))
 
-            for idx, tid in enumerate(work_ids):
-                t = tpl_by_id.get(tid, {})
-                label = t.get("label", "")
-                kind_kr = "입금" if t.get("kind") == "deposit" else "출금"
-                amt = int(t.get("amount", 0) or 0)
+                def _opt_label(i: int):
+                    tid = work_ids[i]
+                    t = tpl_by_id.get(tid, {})
+                    kind_kr = "입금" if t.get("kind") == "deposit" else "출금"
+                    amt = int(t.get("amount", 0) or 0)
+                    return f"{i+1}. {t.get('label','')} ({kind_kr} {amt})"
 
-                row = st.columns([0.7, 5.2, 2.2, 0.7, 0.7], vertical_alignment="center")
-                row[0].markdown(f"<div class='tpl-cell'>{idx+1}</div>", unsafe_allow_html=True)
-                row[1].markdown(f"<div class='tpl-cell'><div class='tpl-label'>{label}</div></div>", unsafe_allow_html=True)
-                row[2].markdown(f"<div class='tpl-cell'><div class='tpl-sub'>{kind_kr} · {amt}</div></div>", unsafe_allow_html=True)
+                pick_i = st.selectbox(
+                    "이동할 항목 선택",
+                    options,
+                    format_func=_opt_label,
+                    key="tpl_simple_pick"
+                )
+
+                b1, b2, b3 = st.columns([1, 1, 2])
+                with b1:
+                    if st.button("위로 ▲", key="tpl_simple_up", disabled=(not st.session_state.tpl_sort_mode) or pick_i == 0, use_container_width=True):
+                        work_ids[pick_i - 1], work_ids[pick_i] = work_ids[pick_i], work_ids[pick_i - 1]
+                        st.session_state.tpl_work_ids = work_ids
+                        st.session_state["tpl_simple_pick"] = max(0, pick_i - 1)
+                        st.rerun()
+                with b2:
+                    if st.button("아래로 ▼", key="tpl_simple_dn", disabled=(not st.session_state.tpl_sort_mode) or pick_i == (len(work_ids) - 1), use_container_width=True):
+                        work_ids[pick_i + 1], work_ids[pick_i] = work_ids[pick_i], work_ids[pick_i + 1]
+                        st.session_state.tpl_work_ids = work_ids
+                        st.session_state["tpl_simple_pick"] = min(len(work_ids) - 1, pick_i + 1)
+                        st.rerun()
+                with b3:
+                    st.caption("정렬모드 ON일 때만 이동 가능")
+
+                # 현재 순서 미리보기(모바일 가독성용)
+                html = ["<div class='tpl-simple'>"]
+                for idx, tid in enumerate(work_ids, start=1):
+                    t = tpl_by_id.get(tid, {})
+                    kind_kr = "입금" if t.get("kind") == "deposit" else "출금"
+                    amt = int(t.get("amount", 0) or 0)
+                    lab = str(t.get("label", "") or "")
+                    html.append(
+                        f"<div class='item'>"
+                        f"<span class='idx'>{idx}</span>"
+                        f"<span class='lab'>{lab}</span>"
+                        f"<div class='meta'>{kind_kr} · {amt}</div>"
+                        f"</div>"
+                    )
+                html.append("</div>")
+                st.markdown("\n".join(html), unsafe_allow_html=True)
 
                 if st.session_state.tpl_sort_mode:
-                    up_disabled = (idx == 0)
-                    down_disabled = (idx == len(work_ids) - 1)
-
-                    if row[3].button("⬆", key=f"tpl_up_fast_{tid}", disabled=up_disabled, use_container_width=True):
-                        work_ids[idx - 1], work_ids[idx] = work_ids[idx], work_ids[idx - 1]
-                        st.session_state.tpl_work_ids = work_ids
-                        st.rerun()
-                    if row[4].button("⬇", key=f"tpl_dn_fast_{tid}", disabled=down_disabled, use_container_width=True):
-                        work_ids[idx + 1], work_ids[idx] = work_ids[idx], work_ids[idx + 1]
-                        st.session_state.tpl_work_ids = work_ids
-                        st.rerun()
-                else:
-                    row[3].markdown("<div class='tpl-cell'></div>", unsafe_allow_html=True)
-                    row[4].markdown("<div class='tpl-cell'></div>", unsafe_allow_html=True)
-
-            if st.session_state.tpl_sort_mode:
-                s1, s2 = st.columns([1.2, 1.2])
-                with s1:
-                    if st.button("저장(한 번에)", key="tpl_save_orders_btn", use_container_width=True):
-                        res = api_admin_save_template_orders(admin_pin, st.session_state.tpl_work_ids)
-                        if res.get("ok"):
-                            toast(f"순서 저장 완료! ({res.get('count', 0)}개)", icon="💾")
+                    s1, s2 = st.columns([1.2, 1.2])
+                    with s1:
+                        if st.button("저장(한 번에)", key="tpl_save_orders_btn_simple", use_container_width=True):
+                            res = api_admin_save_template_orders(admin_pin, st.session_state.tpl_work_ids)
+                            if res.get("ok"):
+                                toast(f"순서 저장 완료! ({res.get('count', 0)}개)", icon="💾")
+                                st.session_state.tpl_sort_mode = False
+                                api_list_templates_cached.clear()
+                                st.session_state.tpl_work_ids = []
+                                st.rerun()
+                            else:
+                                st.error(res.get("error", "저장 실패"))
+                    with s2:
+                        if st.button("취소(원복)", key="tpl_cancel_orders_btn_simple", use_container_width=True):
                             st.session_state.tpl_sort_mode = False
-                            api_list_templates_cached.clear()
-                            st.session_state.tpl_work_ids = []
+                            st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
+                            toast("변경 취소(원복)!", icon="↩️")
                             st.rerun()
-                        else:
-                            st.error(res.get("error", "저장 실패"))
-                with s2:
-                    if st.button("취소(원복)", key="tpl_cancel_orders_btn", use_container_width=True):
-                        st.session_state.tpl_sort_mode = False
-                        st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
-                        toast("변경 취소(원복)!", icon="↩️")
-                        st.rerun()
+
+            # ---- 기존 촘촘 표(PC용) ----
+            else:
+                head = st.columns([0.7, 5.2, 2.2, 1.4], vertical_alignment="center")
+                head[0].markdown("<div class='tpl-head'>순서</div>", unsafe_allow_html=True)
+                head[1].markdown("<div class='tpl-head'>내역</div>", unsafe_allow_html=True)
+                head[2].markdown("<div class='tpl-head'>종류·금액</div>", unsafe_allow_html=True)
+                head[3].markdown("<div class='tpl-head'>이동</div>", unsafe_allow_html=True)
+
+                for idx, tid in enumerate(work_ids):
+                    t = tpl_by_id.get(tid, {})
+                    label = t.get("label", "")
+                    kind_kr = "입금" if t.get("kind") == "deposit" else "출금"
+                    amt = int(t.get("amount", 0) or 0)
+
+                    row = st.columns([0.7, 5.2, 2.2, 0.7, 0.7], vertical_alignment="center")
+                    row[0].markdown(f"<div class='tpl-cell'>{idx+1}</div>", unsafe_allow_html=True)
+                    row[1].markdown(f"<div class='tpl-cell'><div class='tpl-label'>{label}</div></div>", unsafe_allow_html=True)
+                    row[2].markdown(f"<div class='tpl-cell'><div class='tpl-sub'>{kind_kr} · {amt}</div></div>", unsafe_allow_html=True)
+
+                    if st.session_state.tpl_sort_mode:
+                        up_disabled = (idx == 0)
+                        down_disabled = (idx == len(work_ids) - 1)
+
+                        if row[3].button("⬆", key=f"tpl_up_fast_{tid}", disabled=up_disabled, use_container_width=True):
+                            work_ids[idx - 1], work_ids[idx] = work_ids[idx], work_ids[idx - 1]
+                            st.session_state.tpl_work_ids = work_ids
+                            st.rerun()
+                        if row[4].button("⬇", key=f"tpl_dn_fast_{tid}", disabled=down_disabled, use_container_width=True):
+                            work_ids[idx + 1], work_ids[idx] = work_ids[idx], work_ids[idx + 1]
+                            st.session_state.tpl_work_ids = work_ids
+                            st.rerun()
+                    else:
+                        row[3].markdown("<div class='tpl-cell'></div>", unsafe_allow_html=True)
+                        row[4].markdown("<div class='tpl-cell'></div>", unsafe_allow_html=True)
+
+                if st.session_state.tpl_sort_mode:
+                    s1, s2 = st.columns([1.2, 1.2])
+                    with s1:
+                        if st.button("저장(한 번에)", key="tpl_save_orders_btn", use_container_width=True):
+                            res = api_admin_save_template_orders(admin_pin, st.session_state.tpl_work_ids)
+                            if res.get("ok"):
+                                toast(f"순서 저장 완료! ({res.get('count', 0)}개)", icon="💾")
+                                st.session_state.tpl_sort_mode = False
+                                api_list_templates_cached.clear()
+                                st.session_state.tpl_work_ids = []
+                                st.rerun()
+                            else:
+                                st.error(res.get("error", "저장 실패"))
+                    with s2:
+                        if st.button("취소(원복)", key="tpl_cancel_orders_btn", use_container_width=True):
+                            st.session_state.tpl_sort_mode = False
+                            st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
+                            toast("변경 취소(원복)!", icon="↩️")
+                            st.rerun()
 
         st.divider()
 
