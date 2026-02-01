@@ -62,6 +62,51 @@ st.markdown(
         border-color: #2563eb;
     }
 
+# =========================
+# 모바일 UI CSS (제목/데이터프레임 포함)
+# =========================
+st.markdown(
+    """
+    <style>
+    /* =========================================
+       상단 안전 여백 (제목 가림 방지)
+       ========================================= */
+    section.main > div:first-child {
+        padding-top: 2.6rem;
+    }
+
+    @media (max-width: 768px) {
+        section.main > div:first-child {
+            padding-top: 3.2rem;
+        }
+    }
+
+    /* =========================================
+       기본 컨테이너 여백
+       ========================================= */
+    .block-container {
+        padding-bottom: 2.0rem;
+    }
+
+    /* =========================================
+       radio → 버튼처럼
+       ========================================= */
+    div[role="radiogroup"] > label {
+        background: #f3f4f6;
+        padding: 6px 10px;
+        border-radius: 12px;
+        margin-right: 6px;
+        margin-bottom: 6px;
+        border: 1px solid #ddd;
+        font-size: 0.85rem;
+    }
+
+    div[role="radiogroup"] > label:has(input:checked) {
+        background: #2563eb;
+        color: #ffffff;
+        border-color: #2563eb;
+    }
+
     /* =========================================
        dataframe 가로 스크롤 허용
        ========================================= */
@@ -69,33 +114,33 @@ st.markdown(
         overflow-x: auto;
     }
 
-/* =========================================
-   st.header / st.title 제목 크기 제어
-   - PC / 모바일 분리 대응
-   ========================================= */
-div[data-testid="stMarkdownContainer"] h1,
-div[data-testid="stMarkdownContainer"] h2,
-div[data-testid="stMarkdownContainer"] h1 span,
-div[data-testid="stMarkdownContainer"] h2 span {
-    /* PC 기본 */
-    font-size: clamp(1.25rem, 3.5vw, 2.10rem) !important;
-    line-height: 1.18 !important;
-    white-space: normal !important;
-    overflow: visible !important;
-    word-break: keep-all !important;
-    margin-bottom: 0.7rem !important;
-}
-
-/* ✅ 모바일에서는 제목을 더 크게 강제 */
-@media (max-width: 768px) {
+    /* =========================================
+       st.header / st.title 제목 크기 제어
+       - PC / 모바일 분리 대응
+       ========================================= */
     div[data-testid="stMarkdownContainer"] h1,
     div[data-testid="stMarkdownContainer"] h2,
     div[data-testid="stMarkdownContainer"] h1 span,
     div[data-testid="stMarkdownContainer"] h2 span {
-        font-size: clamp(1.35rem, 5.2vw, 2.30rem) !important;
-        line-height: 1.20 !important;
+        /* PC 기본 */
+        font-size: clamp(1.25rem, 3.5vw, 2.10rem) !important;
+        line-height: 1.18 !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        word-break: keep-all !important;
+        margin-bottom: 0.7rem !important;
     }
-}
+
+    /* ✅ 모바일에서는 제목을 더 크게 강제 */
+    @media (max-width: 768px) {
+        div[data-testid="stMarkdownContainer"] h1,
+        div[data-testid="stMarkdownContainer"] h2,
+        div[data-testid="stMarkdownContainer"] h1 span,
+        div[data-testid="stMarkdownContainer"] h2 span {
+            font-size: clamp(1.35rem, 5.2vw, 2.30rem) !important;
+            line-height: 1.20 !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -1686,6 +1731,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
