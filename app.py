@@ -69,22 +69,32 @@ st.markdown(
         overflow-x: auto;
     }
 
-    /* =========================================
-       st.header / st.title 제목: 크기 확실히 줄이기
-       - PC / 모바일 공통 적용
-       - 잘림 없음
-       - 줄바꿈은 허용
-       ========================================= */
+/* =========================================
+   st.header / st.title 제목 크기 제어
+   - PC / 모바일 분리 대응
+   ========================================= */
 div[data-testid="stMarkdownContainer"] h1,
 div[data-testid="stMarkdownContainer"] h2,
 div[data-testid="stMarkdownContainer"] h1 span,
 div[data-testid="stMarkdownContainer"] h2 span {
-    font-size: clamp(1.25rem, 4.0vw, 2.10rem) !important;
+    /* PC 기본 */
+    font-size: clamp(1.25rem, 3.5vw, 2.10rem) !important;
     line-height: 1.18 !important;
     white-space: normal !important;
     overflow: visible !important;
     word-break: keep-all !important;
     margin-bottom: 0.7rem !important;
+}
+
+/* ✅ 모바일에서는 제목을 더 크게 강제 */
+@media (max-width: 768px) {
+    div[data-testid="stMarkdownContainer"] h1,
+    div[data-testid="stMarkdownContainer"] h2,
+    div[data-testid="stMarkdownContainer"] h1 span,
+    div[data-testid="stMarkdownContainer"] h2 span {
+        font-size: clamp(1.35rem, 5.2vw, 2.30rem) !important;
+        line-height: 1.20 !important;
+    }
 }
     </style>
     """,
@@ -1676,6 +1686,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
