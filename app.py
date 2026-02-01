@@ -25,22 +25,17 @@ st.markdown(
         padding-top: 1.1rem;
     }
 
-    /* =========================
-       메인 제목 (우리집 포인트 통장)
-       - 모바일에서 잘림 방지
-       - 자동 줄바꿈
-       ========================= */
-    .app-title {
-        font-weight: 800;
-        line-height: 1.25;
-        margin: 0.4rem 0 0.9rem 0;
-        text-align: left;
+  /* ✅ 메인 제목: 모바일에서도 안 잘리게 */
+.app-title {
+    font-weight: 800;
+    line-height: 1.15;
+    margin: 0.3rem 0 0.6rem 0;
+    text-align: left;
 
-        /* 핵심 */
-        font-size: clamp(1.4rem, 5vw, 2.2rem);
-        white-space: normal;      /* 줄바꿈 허용 */
-        word-break: keep-all;     /* 한글 단어 단위 줄바꿈 */
-    }
+    /* 핵심 */
+    font-size: clamp(1.05rem, 4vw, 1.8rem);
+    white-space: nowrap;   /* 한 줄 유지 */
+}
 
     /* =========================
        radio → 버튼처럼 보이게
@@ -1429,7 +1424,7 @@ asset_total = balance + sv_total
 st.markdown(f"## 🧾 {name} 통장")
 st.markdown(f"### 내 자산: **{asset_total} 포인트**")
 st.markdown(f"#### 통장 잔액: **{balance} 포인트**")
-st.caption(f"적금 총액(진행 중): {sv_total} 포인트")
+st.markdown(f"#### 적금 총액: **{sv_total} 포인트**")
 
 # =========================
 # 탭
@@ -1667,6 +1662,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
