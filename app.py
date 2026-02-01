@@ -20,6 +20,30 @@ st.markdown("""
 <style>
 .block-container { padding-top: 1.1rem; }
 
+/* ✅ 모바일에서 columns가 세로로 무너지지 않게: 가로 스크롤로 전환 */
+div[data-testid="stHorizontalBlock"]{
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  gap: 0.35rem !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 각 column이 줄어들지 않게 */
+div[data-testid="stHorizontalBlock"] > div{
+  flex: 0 0 auto !important;
+}
+
+/* 빠른 버튼은 더 컴팩트 */
+.quick-row .stButton button{
+  width: auto !important;
+  min-width: 64px !important;
+  padding: 0.1rem 0.25rem !important;
+  font-size: 0.78rem !important;
+  height: 2.0rem !important;
+  border-radius: 10px !important;
+}
+
 /* ✅ 상단 제목 줄바꿈 방지 + 자동 축소 */
 .app-title{
   white-space: nowrap;
@@ -1129,11 +1153,12 @@ if st.session_state.admin_ok:
         st.warning("검색 결과가 없어요.")
         st.stop()
 
-    tab_labels = ["📒 전체통장"] + [f"👤 {a['name']}" for a in filtered] + ["⚙️ 설정"]
+    tab_labels = ["⚙️ 설정", "📒 전체통장"] + [f"👤 {a['name']}" for a in filtered]
     tabs = st.tabs(tab_labels)
 
+
     # ✅ 전체통장: "전체 사용자 한꺼번에 합쳐서"가 아니라, "사람별로 따로 통장 내역"
-    with tabs[0]:
+    with tabs[1]:
         st.subheader("📒 전체통장(사람별 통장 내역)")
         for a in filtered:
             nm, sid = a["name"], a["student_id"]
@@ -1150,7 +1175,7 @@ if st.session_state.admin_ok:
                         render_tx_table(df_tx)
 
     # ✅ 각 사용자별 탭: 현재잔액 → 적금총액 → 통장내역 → 진행중 적금 → 목표
-    for i, a in enumerate(filtered, start=1):
+    for i, a in enumerate(filtered, start=2):
         with tabs[i]:
             nm, sid = a["name"], a["student_id"]
 
@@ -1178,7 +1203,7 @@ if st.session_state.admin_ok:
             # 필요하면 goals 컬렉션을 student_id로 조회하는 별도 함수 추가해서 조회만 보여줄 수도 있어요.
 
     # ✅ 설정 탭: 템플릿 / 일괄지급 / PIN 재설정
-    with tabs[-1]:
+    with tabs[0]:
         st.subheader("⚙️ 설정")
 
         admin_pin = ADMIN_PIN
@@ -1607,3 +1632,4 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
