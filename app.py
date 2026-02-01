@@ -15,71 +15,77 @@ KST = timezone(timedelta(hours=9))
 ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
-# ✅ 모바일 UI CSS
-st.markdown("""
-<style>
-.block-container { padding-top: 1.1rem; }
+# =========================
+# 모바일 UI CSS
+# =========================
+st.markdown(
+    """
+    <style>
+    .block-container {
+        padding-top: 1.1rem;
+    }
 
-/* ✅ 모바일에서 columns가 세로로 무너지지 않게: 가로 스크롤로 전환 */
+    /* =========================
+       메인 제목 (우리집 포인트 통장)
+       - 모바일에서 잘림 방지
+       - 자동 줄바꿈
+       ========================= */
+    .app-title {
+        font-weight: 800;
+        line-height: 1.25;
+        margin: 0.4rem 0 0.9rem 0;
+        text-align: left;
 
-/* radio 버튼을 '버튼'처럼 보이게 */
-div[role="radiogroup"] > label {
-  background: #f3f4f6;
-  padding: 6px 10px;
-  border-radius: 10px;
-  margin-right: 6px;
-  border: 1px solid #ddd;
-  font-size: 0.85rem;
-}
+        /* 핵심 */
+        font-size: clamp(1.4rem, 5vw, 2.2rem);
+        white-space: normal;      /* 줄바꿈 허용 */
+        word-break: keep-all;     /* 한글 단어 단위 줄바꿈 */
+    }
 
-div[role="radiogroup"] > label:has(input:checked) {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
-}
+    /* =========================
+       radio → 버튼처럼 보이게
+       ========================= */
+    div[role="radiogroup"] > label {
+        background: #f3f4f6;
+        padding: 6px 10px;
+        border-radius: 12px;
+        margin-right: 6px;
+        margin-bottom: 6px;
+        border: 1px solid #ddd;
+        font-size: 0.85rem;
+    }
 
-/* 빠른 버튼은 더 컴팩트 */
-.quick-row .stButton button{
-  width: auto !important;
-  min-width: 64px !important;
-  padding: 0.1rem 0.25rem !important;
-  font-size: 0.78rem !important;
-  height: 2.0rem !important;
-  border-radius: 10px !important;
-}
+    div[role="radiogroup"] > label:has(input:checked) {
+        background: #2563eb;
+        color: white;
+        border-color: #2563eb;
+    }
 
-/* ✅ 상단 제목 줄바꿈 방지 + 자동 축소 */
-.app-title{
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: clamp(1.15rem, 4.8vw, 2rem);
-  line-height: 1.2;
-  margin: 0.2rem 0 0.8rem 0;
-  font-weight: 800;
-}
+    /* =========================
+       버튼 공통
+       ========================= */
+    .stButton button {
+        width: 100%;
+    }
 
-/* 버튼 폭 전체 */
-.stButton button { width: 100%; }
+    /* =========================
+       dataframe 가로 스크롤 허용
+       ========================= */
+    [data-testid="stDataFrame"] {
+        overflow-x: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-/* ✅ 빠른 버튼(모바일에서 작게) */
-.quick-row .stButton button{
-  padding: 0.15rem 0.25rem !important;
-  font-size: 0.80rem !important;
-  height: 2.1rem !important;
-  border-radius: 10px !important;
-}
-.quick-row [data-testid="column"]{
-  padding-left: 0.1rem !important;
-  padding-right: 0.1rem !important;
-}
-
-/* dataframe 가로 스크롤 허용 */
-[data-testid="stDataFrame"] { overflow-x: auto; }
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown(f'<div class="app-title">🏦 {APP_TITLE}</div>', unsafe_allow_html=True)
+# =========================
+# 상단 제목 표시
+# =========================
+st.markdown(
+    f'<div class="app-title">🏦 {APP_TITLE}</div>',
+    unsafe_allow_html=True
+)
 
 # =========================
 # Firestore init
@@ -1405,13 +1411,29 @@ if slot.get("error"):
 df_tx = slot["df_tx"]
 balance = int(slot["balance"])
 student_id = slot.get("student_id")
-savings_list = slot.get("savings", [])
-sv_total = savings_active_total(savings_list)
 
+# 적금 총액 계산 (진행 중 적금만)
+savings_list = slot.get("savings", []) or []
+sv_total = sum(
+    int(s.get("principal", 0) or 0)
+    for s in savings_list
+    if str(s.get("status", "")).lower() == "active"
+)
+
+# 내 자산 = 통장 잔액 + 적금 총액
+asset_total = balance + sv_total
+
+# =========================
+# 상단 통장 요약
+# =========================
 st.markdown(f"## 🧾 {name} 통장")
-st.write(f"### 현재 잔액: **{balance} 포인트**")
-st.write(f"### 적금 총액: **{sv_total} 포인트**")
+st.markdown(f"### 내 자산: **{asset_total} 포인트**")
+st.markdown(f"#### 통장 잔액: **{balance} 포인트**")
+st.caption(f"적금 총액(진행 중): {sv_total} 포인트")
 
+# =========================
+# 탭
+# =========================
 sub1, sub2, sub3 = st.tabs(["📝 거래", "💰 적금", "🎯 목표"])
 
 # =========================
@@ -1645,6 +1667,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
