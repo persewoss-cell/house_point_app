@@ -16,36 +16,21 @@ ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
 # =========================
-# 모바일 UI CSS (상단 잘림 완전 해결 버전)
+# 모바일 UI CSS (최종 1개만 유지)
 # =========================
 st.markdown(
     """
     <style>
-    /* =========================================
-       ✅ 상단 고정 헤더에 가려지지 않도록
-       실제 콘텐츠 영역에 '안전 여백' 확보
-       ========================================= */
-    section.main > div:first-child {
-        padding-top: 2.6rem;
-    }
-
-    /* 모바일에서는 주소창 때문에 더 필요 */
+    /* 상단 안전 여백(제목 가림 방지) */
+    section.main > div:first-child { padding-top: 2.6rem; }
     @media (max-width: 768px) {
-        section.main > div:first-child {
-            padding-top: 3.2rem;
-        }
+        section.main > div:first-child { padding-top: 3.2rem; }
     }
 
-    /* =========================================
-       기본 컨테이너 여백 (과하지 않게)
-       ========================================= */
-    .block-container {
-        padding-bottom: 2.0rem;
-    }
+    /* 기본 컨테이너 여백 */
+    .block-container { padding-bottom: 2.0rem; }
 
-    /* =========================================
-       radio → 버튼처럼 보이게
-       ========================================= */
+    /* radio → 버튼처럼 */
     div[role="radiogroup"] > label {
         background: #f3f4f6;
         padding: 6px 10px;
@@ -55,68 +40,16 @@ st.markdown(
         border: 1px solid #ddd;
         font-size: 0.85rem;
     }
-
     div[role="radiogroup"] > label:has(input:checked) {
         background: #2563eb;
         color: #ffffff;
         border-color: #2563eb;
     }
 
-# =========================
-# 모바일 UI CSS (최종 정리본)
-# =========================
-st.markdown(
-    """
-    <style>
-    /* =========================================
-       상단 안전 여백 (제목 가림 방지)
-       ========================================= */
-    section.main > div:first-child {
-        padding-top: 2.6rem;
-    }
+    /* dataframe 가로 스크롤 */
+    [data-testid="stDataFrame"] { overflow-x: auto; }
 
-    @media (max-width: 768px) {
-        section.main > div:first-child {
-            padding-top: 3.2rem;
-        }
-    }
-
-    /* =========================================
-       기본 컨테이너 여백
-       ========================================= */
-    .block-container {
-        padding-bottom: 2.0rem;
-    }
-
-    /* =========================================
-       radio → 버튼처럼
-       ========================================= */
-    div[role="radiogroup"] > label {
-        background: #f3f4f6;
-        padding: 6px 10px;
-        border-radius: 12px;
-        margin-right: 6px;
-        margin-bottom: 6px;
-        border: 1px solid #ddd;
-        font-size: 0.85rem;
-    }
-
-    div[role="radiogroup"] > label:has(input:checked) {
-        background: #2563eb;
-        color: #ffffff;
-        border-color: #2563eb;
-    }
-
-    /* =========================================
-       dataframe 가로 스크롤 허용
-       ========================================= */
-    [data-testid="stDataFrame"] {
-        overflow-x: auto;
-    }
-
-    /* =========================================
-       제목(st.header / st.title)
-       ========================================= */
+    /* 제목(st.header / st.title) */
     div[data-testid="stMarkdownContainer"] h1,
     div[data-testid="stMarkdownContainer"] h2,
     div[data-testid="stMarkdownContainer"] h1 span,
@@ -128,23 +61,21 @@ st.markdown(
         word-break: keep-all !important;
         margin-bottom: 0.7rem !important;
     }
-
     @media (max-width: 768px) {
         div[data-testid="stMarkdownContainer"] h1,
         div[data-testid="stMarkdownContainer"] h2,
         div[data-testid="stMarkdownContainer"] h1 span,
         div[data-testid="stMarkdownContainer"] h2 span {
             font-size: clamp(1.35rem, 5.2vw, 2.30rem) !important;
-            line-height: 1.20 !important;
         }
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # =========================
-# 상단 제목 표시 (가장 안정적인 방식)
+# 상단 제목
 # =========================
 st.header(f"🏦 {APP_TITLE}")
 
@@ -1728,6 +1659,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
