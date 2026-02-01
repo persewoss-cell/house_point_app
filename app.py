@@ -79,12 +79,12 @@ div[data-testid="stMarkdownContainer"] h1,
 div[data-testid="stMarkdownContainer"] h2,
 div[data-testid="stMarkdownContainer"] h1 span,
 div[data-testid="stMarkdownContainer"] h2 span {
-    font-size: clamp(1.05rem, 3.2vw, 1.75rem) !important;
-    line-height: 1.15 !important;
+    font-size: clamp(1.25rem, 4.0vw, 2.10rem) !important;
+    line-height: 1.18 !important;
     white-space: normal !important;
     overflow: visible !important;
     word-break: keep-all !important;
-    margin-bottom: 0.6rem !important;
+    margin-bottom: 0.7rem !important;
 }
     </style>
     """,
@@ -1676,6 +1676,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
