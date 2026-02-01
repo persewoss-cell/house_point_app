@@ -16,19 +16,25 @@ ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
 # =========================
-# 모바일 UI CSS (최종 1개만 유지)
+# 모바일 UI CSS (최종 안정 버전)
 # =========================
 st.markdown(
     """
     <style>
     /* 상단 안전 여백(제목 가림 방지) */
-    section.main > div:first-child { padding-top: 2.6rem; }
+    section.main > div:first-child {
+        padding-top: 2.6rem;
+    }
     @media (max-width: 768px) {
-        section.main > div:first-child { padding-top: 3.2rem; }
+        section.main > div:first-child {
+            padding-top: 3.2rem;
+        }
     }
 
     /* 기본 컨테이너 여백 */
-    .block-container { padding-bottom: 2.0rem; }
+    .block-container {
+        padding-bottom: 2.0rem;
+    }
 
     /* radio → 버튼처럼 */
     div[role="radiogroup"] > label {
@@ -47,26 +53,27 @@ st.markdown(
     }
 
     /* dataframe 가로 스크롤 */
-    [data-testid="stDataFrame"] { overflow-x: auto; }
-
-    /* 제목(st.header / st.title) */
-    div[data-testid="stMarkdownContainer"] h1,
-    div[data-testid="stMarkdownContainer"] h2,
-    div[data-testid="stMarkdownContainer"] h1 span,
-    div[data-testid="stMarkdownContainer"] h2 span {
-        font-size: clamp(1.25rem, 3.5vw, 2.10rem) !important;
-        line-height: 1.18 !important;
-        white-space: normal !important;
-        overflow: visible !important;
-        word-break: keep-all !important;
-        margin-bottom: 0.7rem !important;
+    [data-testid="stDataFrame"] {
+        overflow-x: auto;
     }
+
+    /* =========================
+       ✅ 커스텀 앱 제목 (모바일에서도 확실히 커짐)
+       ========================= */
+    .app-title {
+        font-weight: 900;
+        line-height: 1.15;
+        margin: 0.4rem 0 0.9rem 0;
+        text-align: left;
+
+        font-size: clamp(1.4rem, 4.5vw, 2.4rem);
+        white-space: normal;
+        word-break: keep-all;
+    }
+
     @media (max-width: 768px) {
-        div[data-testid="stMarkdownContainer"] h1,
-        div[data-testid="stMarkdownContainer"] h2,
-        div[data-testid="stMarkdownContainer"] h1 span,
-        div[data-testid="stMarkdownContainer"] h2 span {
-            font-size: clamp(1.35rem, 5.2vw, 2.30rem) !important;
+        .app-title {
+            font-size: clamp(1.6rem, 6.5vw, 2.8rem);
         }
     }
     </style>
@@ -75,9 +82,12 @@ st.markdown(
 )
 
 # =========================
-# 상단 제목
+# 상단 제목 (st.header ❌ → 커스텀 div ✅)
 # =========================
-st.header(f"🏦 {APP_TITLE}")
+st.markdown(
+    f'<div class="app-title">🏦 {APP_TITLE}</div>',
+    unsafe_allow_html=True
+)
 
 # =========================
 # Firestore init
@@ -1659,6 +1669,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
