@@ -16,18 +16,36 @@ ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
 # =========================
-# 모바일 UI CSS
+# 모바일 UI CSS (상단 잘림 완전 해결 버전)
 # =========================
 st.markdown(
     """
     <style>
-    /* ✅ 기본 여백만 살짝 (레이아웃 엔진 건드리지 않음) */
+    /* =========================================
+       ✅ 상단 고정 헤더에 가려지지 않도록
+       실제 콘텐츠 영역에 '안전 여백' 확보
+       ========================================= */
+    section.main > div:first-child {
+        padding-top: 2.6rem;
+    }
+
+    /* 모바일에서는 주소창 때문에 더 필요 */
+    @media (max-width: 768px) {
+        section.main > div:first-child {
+            padding-top: 3.2rem;
+        }
+    }
+
+    /* =========================================
+       기본 컨테이너 여백 (과하지 않게)
+       ========================================= */
     .block-container {
-        padding-top: 1.0rem;
         padding-bottom: 2.0rem;
     }
 
-    /* ✅ radio를 '버튼'처럼 보이게 */
+    /* =========================================
+       radio → 버튼처럼 보이게
+       ========================================= */
     div[role="radiogroup"] > label {
         background: #f3f4f6;
         padding: 6px 10px;
@@ -44,9 +62,24 @@ st.markdown(
         border-color: #2563eb;
     }
 
-    /* dataframe 가로 스크롤 허용 */
+    /* =========================================
+       dataframe 가로 스크롤 허용
+       ========================================= */
     [data-testid="stDataFrame"] {
         overflow-x: auto;
+    }
+
+    /* =========================================
+       st.header 제목: 절대 잘리지 않게
+       (줄바꿈은 허용, 숨김/잘림 금지)
+       ========================================= */
+    h1 {
+        font-size: clamp(1.1rem, 3.8vw, 1.8rem) !important;
+        line-height: 1.15 !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        word-break: keep-all !important;
+        margin-bottom: 0.6rem !important;
     }
     </style>
     """,
@@ -1638,6 +1671,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
