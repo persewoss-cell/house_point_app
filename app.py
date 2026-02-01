@@ -16,39 +16,15 @@ ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
 # =========================
-# 모바일 UI CSS + 상단 제목
+# 모바일 UI CSS
 # =========================
 st.markdown(
     """
     <style>
-    /* ✅ Streamlit 상단 고정 헤더에 가려지는 문제 해결:
-       - main 영역을 아래로 밀어줌 (PC/모바일 공통) */
-    div[data-testid="stAppViewContainer"] > .main {
-        padding-top: 4.2rem;
-    }
-
-    /* 모바일에서는 헤더가 더 커서 조금 더 내림 */
-    @media (max-width: 768px) {
-        div[data-testid="stAppViewContainer"] > .main {
-            padding-top: 4.8rem;
-        }
-    }
-
-    /* 기존 block-container 상단 패딩은 충돌 방지 위해 0 */
+    /* ✅ 기본 여백만 살짝 (레이아웃 엔진 건드리지 않음) */
     .block-container {
-        padding-top: 0rem;
-        padding-bottom: 2rem;
-    }
-
-    /* ✅ 메인 제목: 한 줄 유지 + 자동 축소 (잘림/가림 방지) */
-    .app-title {
-        font-weight: 800;
-        line-height: 1.15;
-        margin: 0.2rem 0 0.9rem 0;
-        text-align: left;
-
-        font-size: clamp(1.0rem, 3.6vw, 1.7rem);
-        white-space: nowrap;
+        padding-top: 1.0rem;
+        padding-bottom: 2.0rem;
     }
 
     /* ✅ radio를 '버튼'처럼 보이게 */
@@ -68,11 +44,6 @@ st.markdown(
         border-color: #2563eb;
     }
 
-    /* 버튼 폭 전체 */
-    .stButton button {
-        width: 100%;
-    }
-
     /* dataframe 가로 스크롤 허용 */
     [data-testid="stDataFrame"] {
         overflow-x: auto;
@@ -82,10 +53,10 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.markdown(
-    f'<div class="app-title">🏦 {APP_TITLE}</div>',
-    unsafe_allow_html=True
-)
+# =========================
+# 상단 제목 표시 (가장 안정적인 방식)
+# =========================
+st.header(f"🏦 {APP_TITLE}")
 
 # =========================
 # Firestore init
@@ -1667,6 +1638,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
