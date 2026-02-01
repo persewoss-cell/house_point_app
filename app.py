@@ -75,17 +75,17 @@ st.markdown(
        - 잘림 없음
        - 줄바꿈은 허용
        ========================================= */
-    div[data-testid="stMarkdownContainer"] h1,
-    div[data-testid="stMarkdownContainer"] h2,
-    div[data-testid="stMarkdownContainer"] h1 span,
-    div[data-testid="stMarkdownContainer"] h2 span {
-        font-size: clamp(0.85rem, 2.6vw, 1.45rem) !important;
-        line-height: 1.12 !important;
-        white-space: normal !important;
-        overflow: visible !important;
-        word-break: keep-all !important;
-        margin-bottom: 0.5rem !important;
-    }
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] h2,
+div[data-testid="stMarkdownContainer"] h1 span,
+div[data-testid="stMarkdownContainer"] h2 span {
+    font-size: clamp(1.05rem, 3.2vw, 1.75rem) !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    word-break: keep-all !important;
+    margin-bottom: 0.6rem !important;
+}
     </style>
     """,
     unsafe_allow_html=True
@@ -1676,6 +1676,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
