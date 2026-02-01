@@ -1477,37 +1477,39 @@ with sub1:
         st.session_state[wd_key] = 0
         st.rerun()
 
-    st.caption("⚡ 빠른 금액")
+    st.caption("⚡ 빠른 입금 / 출금")
 
     QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
 
-    quick_amt = st.radio(
-        "금액 선택",
-        QUICK_AMOUNTS,
-        horizontal=True,
-        key=f"quick_amt_{name}"
-    )
+    # ---- 빠른 입금 버튼(한 줄)
+    st.caption("⚡ 빠른 입금 (+)")
+    c0, c1, c2, c3, c4, c5, c6, c_reset = st.columns([1,1,1,1,1,1,1,1.3])
+    for col, amt in zip([c0,c1,c2,c3,c4,c5,c6], QUICK_AMOUNTS):
+        with col:
+            if st.button(f"+{amt}", key=f"qdep_{amt}_{name}", use_container_width=True):
+                st.session_state[dep_key] = int(st.session_state.get(dep_key, 0)) + int(amt)
+                st.session_state[wd_key] = 0
+                st.rerun()
+    with c_reset:
+        if st.button("초기화", key=f"qreset_dep_{name}", use_container_width=True):
+            st.session_state[dep_key] = 0
+            st.session_state[wd_key] = 0
+            st.rerun()
 
-    q1, q2, q3 = st.columns(3)
-
-    with q1:
-        if st.button("+추가", key=f"quick_plus_{name}", use_container_width=True):
-            _add_amount(int(quick_amt), True)
-
-    with q2:
-        if st.button("-추가", key=f"quick_minus_{name}", use_container_width=True):
-            _add_amount(int(quick_amt), False)
-
-    with q3:
-        if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
-            _reset_amounts()
-
-    c_reset1, c_reset2 = st.columns([1, 3])
-    with c_reset1:
-        if st.button("금액 초기화", key=f"amt_reset_{name}", use_container_width=True):
-            _reset_amounts()
-    with c_reset2:
-        st.caption("")
+    # ---- 빠른 출금 버튼(한 줄)
+    st.caption("⚡ 빠른 출금 (-)")
+    d0, d1, d2, d3, d4, d5, d6, d_reset = st.columns([1,1,1,1,1,1,1,1.3])
+    for col, amt in zip([d0,d1,d2,d3,d4,d5,d6], QUICK_AMOUNTS):
+        with col:
+            if st.button(f"-{amt}", key=f"qwd_{amt}_{name}", use_container_width=True):
+                st.session_state[wd_key] = int(st.session_state.get(wd_key, 0)) + int(amt)
+                st.session_state[dep_key] = 0
+                st.rerun()
+    with d_reset:
+        if st.button("초기화", key=f"qreset_wd_{name}", use_container_width=True):
+            st.session_state[dep_key] = 0
+            st.session_state[wd_key] = 0
+            st.rerun()
 
     cA, cB = st.columns(2)
     with cA:
@@ -1641,6 +1643,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
