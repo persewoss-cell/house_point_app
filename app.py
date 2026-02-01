@@ -70,21 +70,22 @@ st.markdown(
     }
 
     /* =========================================
-       st.header 제목: 절대 잘리지 않게
-       (줄바꿈은 허용, 숨김/잘림 금지)
+       st.header / st.title 제목: 크기 확실히 줄이기
+       - PC / 모바일 공통 적용
+       - 잘림 없음
+       - 줄바꿈은 허용
        ========================================= */
-    h1 {
-        font-size: clamp(0.95rem, 3.0vw, 1.6rem) !important;
+    div[data-testid="stMarkdownContainer"] h1,
+    div[data-testid="stMarkdownContainer"] h2,
+    div[data-testid="stMarkdownContainer"] h1 span,
+    div[data-testid="stMarkdownContainer"] h2 span {
+        font-size: clamp(0.85rem, 2.6vw, 1.45rem) !important;
         line-height: 1.12 !important;
         white-space: normal !important;
         overflow: visible !important;
         word-break: keep-all !important;
         margin-bottom: 0.5rem !important;
     }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 # =========================
 # 상단 제목 표시 (가장 안정적인 방식)
@@ -1671,6 +1672,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
