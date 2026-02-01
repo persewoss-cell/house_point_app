@@ -60,22 +60,24 @@ st.markdown(
     /* =========================
        ✅ 커스텀 앱 제목 (모바일에서도 확실히 커짐)
        ========================= */
-    .app-title {
-        font-weight: 900;
-        line-height: 1.15;
-        margin: 0.4rem 0 0.9rem 0;
-        text-align: left;
-
-        font-size: clamp(1.4rem, 4.5vw, 2.4rem);
-        white-space: normal;
-        word-break: keep-all;
-    }
-
-    @media (max-width: 768px) {
         .app-title {
-            font-size: clamp(1.6rem, 6.5vw, 2.8rem);
+            font-weight: 900;
+            line-height: 1.18;
+            margin: 0.6rem 0 1.0rem 0;
+            text-align: left;
+
+            /* PC 포함 기본 */
+            font-size: clamp(1.6rem, 5.2vw, 2.8rem);
+            white-space: normal;
+            word-break: keep-all;
         }
-    }
+
+        /* 모바일에서는 더 크게 */
+        @media (max-width: 768px) {
+            .app-title {
+                font-size: clamp(1.9rem, 7.5vw, 3.2rem);
+            }
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1669,6 +1671,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
