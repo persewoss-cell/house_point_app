@@ -60,35 +60,54 @@ st.markdown(
         .app-title { font-size: clamp(2.05rem, 7.9vw, 3.3rem); }
     }
 
-    /* ✅ 템플릿 카드형(모바일 친화) */
-    .tpl-card {
-        border: 1px solid #eee;
-        border-radius: 12px;
-        padding: 10px 12px;
-        margin: 6px 0;
-        background: #fff;
+    /* ✅ 전체적으로 줄간격 조금 촘촘하게 */
+    p, .stMarkdown { margin-bottom: 0.35rem !important; }
+    .stCaptionContainer { margin-top: 0.15rem !important; }
+
+    /* ✅ 템플릿 정렬 표(엑셀 느낌) */
+    .tpl-head {
+        font-weight: 800;
+        padding: 6px 6px;
+        border-bottom: 2px solid #ddd;
+        margin-bottom: 4px;
     }
-    .tpl-meta {
-        font-size: 0.92rem;
+    .tpl-cell {
+        padding: 4px 6px;
+        border-bottom: 1px solid #eee;
         line-height: 1.15;
-        margin: 0;
+        font-size: 0.95rem;
+    }
+    .tpl-label {
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    @media (max-width: 768px){
+        .tpl-label{ white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow:hidden; }
     }
     .tpl-sub {
-        color: #666;
+        color:#666;
         font-size: 0.85rem;
-        margin-top: 4px;
+        margin-top: 2px;
+        line-height: 1.05;
     }
 
-    /* 버튼 작게 */
-    button[kind="secondary"] {
-        padding: 0.15rem 0.35rem !important;
-        min-height: 1.6rem !important;
+    /* ✅ 버튼(특히 화살표) 작게 + 가운데 */
+    div[data-testid="stButton"] > button {
+        padding: 0.05rem 0.28rem !important;
+        min-height: 1.45rem !important;
         line-height: 1 !important;
+        font-size: 0.95rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     button[kind="primary"] {
         padding: 0.35rem 0.6rem !important;
         min-height: 2.0rem !important;
     }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -243,6 +262,7 @@ def api_list_templates_cached():
                 "amount": int(t.get("amount", 0) or 0),
                 "order": int(t.get("order", 999999) or 999999),
             })
+    # ✅ order 우선, 그 다음 label
     templates.sort(key=lambda x: (int(x.get("order", 999999)), str(x.get("label", ""))))
     return {"ok": True, "templates": templates}
 
@@ -1318,14 +1338,14 @@ if st.session_state.admin_ok:
             st.caption("관리자 탭에서는 학생 PIN이 없어 목표 설정/수정은 표시하지 않습니다.")
 
     # =========================
-    # 설정 탭 (요청: 일괄 지급/벌금 위로, 템플릿 아래로)
+    # 설정 탭 (순서: 일괄지급/벌금 → 템플릿정렬 → 템플릿추가/삭제 → PIN재설정(맨 아래))
     # =========================
     with tabs[0]:
         st.subheader("⚙️ 설정")
         admin_pin = ADMIN_PIN
 
         # -------------------------------------------------
-        # 1) ✅ 전체 일괄 지급/벌금 (맨 위로 올림)
+        # 1) ✅ 전체 일괄 지급/벌금 (맨 위)
         # -------------------------------------------------
         st.markdown("### 🎁 전체 일괄 지급/벌금 (템플릿/빠른 금액)")
 
@@ -1475,29 +1495,9 @@ if st.session_state.admin_ok:
         st.divider()
 
         # -------------------------------------------------
-        # 2) PIN 재설정 (중간)
+        # 2) ✅ 템플릿 정렬/관리 (촘촘 Row + 저장 1번)
         # -------------------------------------------------
-        st.markdown("### 🔧 PIN 재설정")
-        target = st.text_input("대상 학생 이름", key="reset_target_setting").strip()
-        newp = st.text_input("새 PIN(4자리)", key="reset_pin_setting", type="password").strip()
-        if st.button("PIN 변경", key="reset_run_setting", use_container_width=True):
-            if not target:
-                st.error("대상 이름을 입력해 주세요.")
-            elif not pin_ok(newp):
-                st.error("새 PIN은 4자리 숫자여야 해요.")
-            else:
-                res = api_admin_reset_pin(admin_pin, target, newp)
-                if res.get("ok"):
-                    toast("PIN 변경 완료!", icon="🔧")
-                else:
-                    st.error(res.get("error", "PIN 변경 실패"))
-
-        st.divider()
-
-        # -------------------------------------------------
-        # 3) ✅ 템플릿 정렬/관리 (아래로 내림) - 모바일 친화 카드형
-        # -------------------------------------------------
-        st.markdown("### 🧩 내역 템플릿 관리 (모바일 친화 + 저장 1번)")
+        st.markdown("### 🧩 내역 템플릿 순서 정렬 (촘촘 + 저장 1번)")
 
         tpl_res2 = api_list_templates_cached()
         templates = tpl_res2.get("templates", []) if tpl_res2.get("ok") else []
@@ -1505,6 +1505,7 @@ if st.session_state.admin_ok:
 
         tpl_by_id = {t["template_id"]: t for t in templates}
 
+        # work_ids 초기화/동기화
         if not st.session_state.tpl_sort_mode:
             st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
         else:
@@ -1512,10 +1513,10 @@ if st.session_state.admin_ok:
             if (not st.session_state.tpl_work_ids) or (set(st.session_state.tpl_work_ids) != set(cur_ids)):
                 st.session_state.tpl_work_ids = cur_ids
 
-        cA, cB, cC = st.columns([1.2, 1.2, 2.6])
+        cA, cB, cC = st.columns([1.1, 1.1, 1.8])
         with cA:
             if st.button(
-                "정렬 모드 ON" if not st.session_state.tpl_sort_mode else "정렬 모드 OFF",
+                "정렬모드 ON" if not st.session_state.tpl_sort_mode else "정렬모드 OFF",
                 key="tpl_sort_toggle",
                 use_container_width=True
             ):
@@ -1525,7 +1526,7 @@ if st.session_state.admin_ok:
                 st.rerun()
 
         with cB:
-            if st.button("order 자동 채우기(1회)", key="tpl_backfill_btn2", use_container_width=True):
+            if st.button("order 채우기(1회)", key="tpl_backfill_btn2", use_container_width=True):
                 res = api_admin_backfill_template_order(admin_pin)
                 if res.get("ok"):
                     toast("order 초기화 완료!", icon="🧷")
@@ -1548,74 +1549,70 @@ if st.session_state.admin_ok:
 
         if st.session_state.tpl_sort_mode:
             st.caption("✅ ⬆️⬇️은 화면에서만 즉시 이동 → 마지막에 ‘저장(한 번에)’ 1번 누르면 DB 반영")
-        else:
-            st.caption("ℹ️ 정렬 모드를 켜면 빠르게 순서만 바꾸고 한번에 저장할 수 있어요.")
 
         work_ids = st.session_state.tpl_work_ids
         if not work_ids:
             st.info("템플릿이 아직 없어요.")
         else:
+            # 헤더(엑셀 느낌)
+            head = st.columns([0.7, 5.2, 2.2, 1.4], vertical_alignment="center")
+            head[0].markdown("<div class='tpl-head'>순서</div>", unsafe_allow_html=True)
+            head[1].markdown("<div class='tpl-head'>내역</div>", unsafe_allow_html=True)
+            head[2].markdown("<div class='tpl-head'>종류·금액</div>", unsafe_allow_html=True)
+            head[3].markdown("<div class='tpl-head'>이동</div>", unsafe_allow_html=True)
+
             for idx, tid in enumerate(work_ids):
                 t = tpl_by_id.get(tid, {})
                 label = t.get("label", "")
                 kind_kr = "입금" if t.get("kind") == "deposit" else "출금"
                 amt = int(t.get("amount", 0) or 0)
 
-                # 카드(모바일에서도 행처럼 보이게)
-                st.markdown('<div class="tpl-card">', unsafe_allow_html=True)
-                top = st.columns([0.9, 4.4, 1.6])
+                row = st.columns([0.7, 5.2, 2.2, 0.7, 0.7], vertical_alignment="center")
+                row[0].markdown(f"<div class='tpl-cell'>{idx+1}</div>", unsafe_allow_html=True)
+                row[1].markdown(f"<div class='tpl-cell'><div class='tpl-label'>{label}</div></div>", unsafe_allow_html=True)
+                row[2].markdown(f"<div class='tpl-cell'><div class='tpl-sub'>{kind_kr} · {amt}</div></div>", unsafe_allow_html=True)
 
-                with top[0]:
-                    st.markdown(f"<p class='tpl-meta'><b>{idx+1}</b></p>", unsafe_allow_html=True)
+                if st.session_state.tpl_sort_mode:
+                    up_disabled = (idx == 0)
+                    down_disabled = (idx == len(work_ids) - 1)
 
-                with top[1]:
-                    st.markdown(f"<p class='tpl-meta'><b>{label}</b></p>", unsafe_allow_html=True)
-                    st.markdown(f"<p class='tpl-sub'>{kind_kr} · {amt}</p>", unsafe_allow_html=True)
-
-                with top[2]:
-                    if st.session_state.tpl_sort_mode:
-                        up_disabled = (idx == 0)
-                        down_disabled = (idx == len(work_ids) - 1)
-
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if st.button("⬆", key=f"tpl_up_fast_{tid}", disabled=up_disabled, use_container_width=True):
-                                work_ids[idx - 1], work_ids[idx] = work_ids[idx], work_ids[idx - 1]
-                                st.session_state.tpl_work_ids = work_ids
-                                st.rerun()
-                        with b2:
-                            if st.button("⬇", key=f"tpl_dn_fast_{tid}", disabled=down_disabled, use_container_width=True):
-                                work_ids[idx + 1], work_ids[idx] = work_ids[idx], work_ids[idx + 1]
-                                st.session_state.tpl_work_ids = work_ids
-                                st.rerun()
-                    else:
-                        st.caption("")  # 정렬 모드 OFF이면 빈칸
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-        if st.session_state.tpl_sort_mode:
-            s1, s2 = st.columns([1.2, 1.2])
-            with s1:
-                if st.button("저장(한 번에)", key="tpl_save_orders_btn", use_container_width=True):
-                    res = api_admin_save_template_orders(admin_pin, st.session_state.tpl_work_ids)
-                    if res.get("ok"):
-                        toast(f"순서 저장 완료! ({res.get('count', 0)}개)", icon="💾")
-                        st.session_state.tpl_sort_mode = False
-                        api_list_templates_cached.clear()
-                        st.session_state.tpl_work_ids = []
+                    if row[3].button("⬆", key=f"tpl_up_fast_{tid}", disabled=up_disabled, use_container_width=True):
+                        work_ids[idx - 1], work_ids[idx] = work_ids[idx], work_ids[idx - 1]
+                        st.session_state.tpl_work_ids = work_ids
                         st.rerun()
-                    else:
-                        st.error(res.get("error", "저장 실패"))
-            with s2:
-                if st.button("취소(원복)", key="tpl_cancel_orders_btn", use_container_width=True):
-                    st.session_state.tpl_sort_mode = False
-                    st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
-                    toast("변경 취소(원복)!", icon="↩️")
-                    st.rerun()
+                    if row[4].button("⬇", key=f"tpl_dn_fast_{tid}", disabled=down_disabled, use_container_width=True):
+                        work_ids[idx + 1], work_ids[idx] = work_ids[idx], work_ids[idx + 1]
+                        st.session_state.tpl_work_ids = work_ids
+                        st.rerun()
+                else:
+                    row[3].markdown("<div class='tpl-cell'></div>", unsafe_allow_html=True)
+                    row[4].markdown("<div class='tpl-cell'></div>", unsafe_allow_html=True)
+
+            if st.session_state.tpl_sort_mode:
+                s1, s2 = st.columns([1.2, 1.2])
+                with s1:
+                    if st.button("저장(한 번에)", key="tpl_save_orders_btn", use_container_width=True):
+                        res = api_admin_save_template_orders(admin_pin, st.session_state.tpl_work_ids)
+                        if res.get("ok"):
+                            toast(f"순서 저장 완료! ({res.get('count', 0)}개)", icon="💾")
+                            st.session_state.tpl_sort_mode = False
+                            api_list_templates_cached.clear()
+                            st.session_state.tpl_work_ids = []
+                            st.rerun()
+                        else:
+                            st.error(res.get("error", "저장 실패"))
+                with s2:
+                    if st.button("취소(원복)", key="tpl_cancel_orders_btn", use_container_width=True):
+                        st.session_state.tpl_sort_mode = False
+                        st.session_state.tpl_work_ids = [t["template_id"] for t in templates]
+                        toast("변경 취소(원복)!", icon="↩️")
+                        st.rerun()
 
         st.divider()
 
-        # ---- 템플릿 추가/수정/삭제 ----
+        # -------------------------------------------------
+        # 3) 템플릿 추가/수정/삭제
+        # -------------------------------------------------
         st.markdown("### 🧩 템플릿 추가/수정/삭제")
 
         KIND_TO_KR = {"deposit": "입금", "withdraw": "출금"}
@@ -1711,6 +1708,26 @@ if st.session_state.admin_ok:
                     if st.button("아니오", key="tpl_del_no_setting2", use_container_width=True):
                         st.session_state["tpl_del_confirm_setting2"] = False
                         st.rerun()
+
+        st.divider()
+
+        # -------------------------------------------------
+        # 4) PIN 재설정 (✅ 맨 아래로 이동)
+        # -------------------------------------------------
+        st.markdown("### 🔧 PIN 재설정 (맨 아래)")
+        target = st.text_input("대상 학생 이름", key="reset_target_setting").strip()
+        newp = st.text_input("새 PIN(4자리)", key="reset_pin_setting", type="password").strip()
+        if st.button("PIN 변경", key="reset_run_setting", use_container_width=True):
+            if not target:
+                st.error("대상 이름을 입력해 주세요.")
+            elif not pin_ok(newp):
+                st.error("새 PIN은 4자리 숫자여야 해요.")
+            else:
+                res = api_admin_reset_pin(admin_pin, target, newp)
+                if res.get("ok"):
+                    toast("PIN 변경 완료!", icon="🔧")
+                else:
+                    st.error(res.get("error", "PIN 변경 실패"))
 
     st.stop()
 
