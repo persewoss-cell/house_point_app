@@ -21,18 +21,6 @@ st.markdown("""
 .block-container { padding-top: 1.1rem; }
 
 /* ✅ 모바일에서 columns가 세로로 무너지지 않게: 가로 스크롤로 전환 */
-div[data-testid="stHorizontalBlock"]{
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  gap: 0.35rem !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* 각 column이 줄어들지 않게 */
-div[data-testid="stHorizontalBlock"] > div{
-  flex: 0 0 auto !important;
-}
 
 /* 빠른 버튼은 더 컴팩트 */
 .quick-row .stButton button{
@@ -1473,25 +1461,43 @@ with sub1:
         st.session_state[wd_key] = 0
         st.rerun()
 
-    st.caption("⚡ 빠른 입금 (+)")
-    with st.container():
-        st.markdown('<div class="quick-row">', unsafe_allow_html=True)
-        cols = st.columns(len(AMOUNTS))
-        for col, amt in zip(cols, AMOUNTS):
-            with col:
-                if st.button(f"+{amt}", key=f"plus_{amt}_{name}", use_container_width=True):
-                    _add_amount(amt, True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("⚡ 빠른 금액")
 
-    st.caption("⚡ 빠른 출금 (-)")
-    with st.container():
-        st.markdown('<div class="quick-row">', unsafe_allow_html=True)
-        cols = st.columns(len(AMOUNTS))
-        for col, amt in zip(cols, AMOUNTS):
-            with col:
-                if st.button(f"-{amt}", key=f"minus_{amt}_{name}", use_container_width=True):
-                    _add_amount(amt, False)
-        st.markdown("</div>", unsafe_allow_html=True)
+    AMOUNTS = [10, 20, 50, 100, 200, 500, 1000]
+
+    qc1, qc2, qc3, qc4 = st.columns([2.4, 1.2, 1.2, 1.6])
+
+    with qc1:
+        quick_amt = st.selectbox(
+            "금액 선택",
+            AMOUNTS,
+            index=0,
+            key=f"quick_amt_{name}"
+        )
+
+    with qc2:
+        if st.button(
+            "+추가",
+            key=f"quick_plus_{name}",
+            use_container_width=True
+        ):
+            _add_amount(int(quick_amt), True)
+
+    with qc3:
+        if st.button(
+            "-추가",
+            key=f"quick_minus_{name}",
+            use_container_width=True
+        ):
+            _add_amount(int(quick_amt), False)
+
+    with qc4:
+        if st.button(
+            "금액 초기화",
+            key=f"quick_reset_{name}",
+            use_container_width=True
+        ):
+            _reset_amounts()
 
     c_reset1, c_reset2 = st.columns([1, 3])
     with c_reset1:
@@ -1632,4 +1638,5 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
