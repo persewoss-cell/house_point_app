@@ -244,7 +244,7 @@ def render_capture_amount_ui(prefix: str, memo_key: str, dep_key: str, wd_key: s
     prev_amt_key = f"{prefix}_prev_amt"
     prev_tpl_key = f"{prefix}_prev_tpl"
 
-    st.session_state.setdefault(mode_key, "금액(+)")
+    st.session_state.setdefault(mode_key, "입금(+)")
     st.session_state.setdefault(amt_key, 0)
     st.session_state.setdefault(prev_amt_key, 0)
     st.session_state.setdefault(prev_tpl_key, "(직접 입력)")
@@ -261,11 +261,11 @@ def render_capture_amount_ui(prefix: str, memo_key: str, dep_key: str, wd_key: s
                 st.session_state[memo_key] = tpl["label"]
                 amt = int(tpl["amount"])
                 if tpl["kind"] == "deposit":
-                    st.session_state[mode_key] = "금액(+)"
+                    st.session_state[mode_key] = "입금(+)"
                     st.session_state[dep_key] = amt
                     st.session_state[wd_key] = 0
                 else:
-                    st.session_state[mode_key] = "금액(-)"
+                    st.session_state[mode_key] = "출금(-)"
                     st.session_state[wd_key] = amt
                     st.session_state[dep_key] = 0
 
@@ -274,7 +274,7 @@ def render_capture_amount_ui(prefix: str, memo_key: str, dep_key: str, wd_key: s
     st.caption("⚡ 빠른 금액")
 
     # 적용(입금/출금) - 캡쳐처럼
-    st.radio("적용", ["금액(+)", "금액(-)"], horizontal=True, key=mode_key)
+    st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
 
     # 금액 선택(캡쳐처럼) - 라디오 캡슐 + 동그라미
     amounts = [0, 10, 20, 50, 100, 200, 500, 1000]
@@ -285,7 +285,7 @@ def render_capture_amount_ui(prefix: str, memo_key: str, dep_key: str, wd_key: s
     prev_amt = int(st.session_state.get(prev_amt_key, 0) or 0)
     if cur_amt != prev_amt:
         delta = cur_amt  # 선택 = '한 번 누른 것'으로 처리
-        if st.session_state.get(mode_key) == "금액(+)":
+        if st.session_state.get(mode_key) == "입금(+)":
             # 출금이 있으면 먼저 상계
             wd = int(st.session_state.get(wd_key, 0) or 0)
             dep = int(st.session_state.get(dep_key, 0) or 0)
