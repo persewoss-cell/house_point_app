@@ -1506,6 +1506,130 @@ def template_display_for_trade(t):
 # ✅ [버그 수정 핵심] 표시 문자열(셀렉트박스 값) → 템플릿으로 바로 매핑
 TEMPLATE_BY_DISPLAY = {template_display_for_trade(t): t for t in TEMPLATES}
 
+# =========================
+# ✅ 공용: 거래 입력 UI (설정탭 방식 그대로)
+# - 원형 버튼 + 템플릿 반영 + 금액(+) / 금액(-) + 계산기 방식(net)
+# =========================
+def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display: dict):
+    memo_key = f"{prefix}_memo"
+    dep_key = f"{prefix}_dep"
+    wd_key = f"{prefix}_wd"
+    tpl_key = f"{prefix}_tpl"
+    mode_key = f"{prefix}_mode"
+    prev_key = f"{prefix}_quick_prev"
+
+    st.session_state.setdefault(memo_key, "")
+    st.session_state.setdefault(dep_key, 0)
+    st.session_state.setdefault(wd_key, 0)
+    st.session_state.setdefault(tpl_key, "(직접 입력)")
+    st.session_state.setdefault(mode_key, "금액(+)")
+    st.session_state.setdefault(prev_key, None)
+
+    def _get_net() -> int:
+        dep = int(st.session_state.get(dep_key, 0) or 0)
+        wd = int(st.session_state.get(wd_key, 0) or 0)
+        return dep - wd
+
+    def _set_by_net(net: int):
+        net = int(net or 0)
+        if net >= 0:
+            st.session_state[dep_key] = net
+            st.session_state[wd_key] = 0
+        else:
+            st.session_state[dep_key] = 0
+            st.session_state[wd_key] = -net
+
+    def _apply_amt(amt: int):
+        amt = int(amt or 0)
+        if amt == 0:
+            st.session_state[dep_key] = 0
+            st.session_state[wd_key] = 0
+            return
+
+        sign = 1 if st.session_state[mode_key] == "금액(+)" else -1
+        net = _get_net() + (sign * amt)
+        _set_by_net(net)
+
+    # -------------------------
+    # 템플릿 (선택이 바뀔 때만 1회 세팅 + rerun)
+    # -------------------------
+    tpl_prev_key = f"{prefix}_tpl_prev"
+    st.session_state.setdefault(tpl_prev_key, "(직접 입력)")
+
+    tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
+    sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
+
+    if sel != st.session_state.get(tpl_prev_key):
+        st.session_state[tpl_prev_key] = sel
+
+        if sel != "(직접 입력)":
+            tpl = template_by_display.get(sel)
+            if tpl:
+                st.session_state[memo_key] = tpl["label"]
+                amt = int(tpl["amount"])
+
+                if tpl["kind"] == "deposit":
+                    _set_by_net(amt)
+                    st.session_state[mode_key] = "금액(+)"
+                else:
+                    _set_by_net(-amt)
+                    st.session_state[mode_key] = "금액(-)"
+
+                st.session_state[f"{prefix}_quick_skip_once"] = True
+
+        st.rerun()
+
+    st.text_input("내역", key=memo_key)
+
+    # -------------------------
+    # 빠른 금액(원형 버튼) + 모드(금액+/금액-)
+    # -------------------------
+    st.caption("⚡ 빠른 금액(원형 버튼)")
+    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
+
+    st.radio("적용", ["금액(+)", "금액(-)"], horizontal=True, key=mode_key)
+
+    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+    opts = [str(a) for a in QUICK_AMOUNTS]
+    pick_key = f"{prefix}_quick_pick"
+    pick = st.radio(
+        "빠른금액",
+        opts,
+        horizontal=True,
+        label_visibility="collapsed",
+        key=pick_key,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    skip_key = f"{prefix}_quick_skip_once"
+    st.session_state.setdefault(skip_key, False)
+
+    apply_key = f"{prefix}_quick_apply_sig"
+    st.session_state.setdefault(apply_key, "")
+
+    sig = f"{pick}|{st.session_state.get(mode_key, '금액(+)')}"
+
+    if st.session_state.get(skip_key, False):
+        st.session_state[apply_key] = sig
+        st.session_state[skip_key] = False
+    else:
+        if st.session_state.get(apply_key, "") == "":
+            st.session_state[apply_key] = sig
+        elif st.session_state.get(apply_key) != sig:
+            st.session_state[apply_key] = sig
+            _apply_amt(int(pick))
+            st.rerun()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.number_input("입금", min_value=0, step=1, key=dep_key)
+    with c2:
+        st.number_input("출금", min_value=0, step=1, key=wd_key)
+
+    memo = str(st.session_state.get(memo_key, "") or "").strip()
+    dep = int(st.session_state.get(dep_key, 0) or 0)
+    wd = int(st.session_state.get(wd_key, 0) or 0)
+    return memo, dep, wd
 
 # =========================
 # 관리자 화면
@@ -1531,152 +1655,6 @@ if st.session_state.admin_ok:
 
     admin_pin = ADMIN_PIN
 
-    # -------------------------
-    # ✅ 공용: 관리자용 거래 입력 UI (캡쳐와 동일 형태)
-    # -------------------------
-    # -------------------------
-    # ✅ 공용: 관리자용 거래 입력 UI (원형 버튼 + 템플릿 반영)
-    # -------------------------
-    def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display: dict):
-        memo_key = f"{prefix}_memo"
-        dep_key = f"{prefix}_dep"
-        wd_key = f"{prefix}_wd"
-        tpl_key = f"{prefix}_tpl"
-        mode_key = f"{prefix}_mode"          # ✅ 모드 버튼 유지
-        prev_key = f"{prefix}_quick_prev"    # ✅ 무한 rerun 방지
-
-        st.session_state.setdefault(memo_key, "")
-        st.session_state.setdefault(dep_key, 0)
-        st.session_state.setdefault(wd_key, 0)
-        st.session_state.setdefault(tpl_key, "(직접 입력)")
-        st.session_state.setdefault(mode_key, "금액(+)")
-        st.session_state.setdefault(prev_key, None)
-
-        def _get_net() -> int:
-            dep = int(st.session_state.get(dep_key, 0) or 0)
-            wd = int(st.session_state.get(wd_key, 0) or 0)
-            return dep - wd
-
-        def _set_by_net(net: int):
-            net = int(net or 0)
-            if net >= 0:
-                st.session_state[dep_key] = net
-                st.session_state[wd_key] = 0
-            else:
-                st.session_state[dep_key] = 0
-                st.session_state[wd_key] = -net
-
-        def _apply_amt(amt: int):
-            amt = int(amt or 0)
-
-            # ✅ 0은 초기화(둘 다 0)
-            if amt == 0:
-                st.session_state[dep_key] = 0
-                st.session_state[wd_key] = 0
-                return
-
-            sign = 1 if st.session_state[mode_key] == "금액(+)" else -1
-            net = _get_net() + (sign * amt)
-            _set_by_net(net)
-
-        # -------------------------
-        # 템플릿  ✅(관리자탭 반영 버그 수정: prev 추적 + 변경시에만 rerun)
-        # -------------------------
-        tpl_prev_key = f"{prefix}_tpl_prev"
-        st.session_state.setdefault(tpl_prev_key, "(직접 입력)")
-
-        tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
-        sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
-
-        # ✅ 선택이 바뀌는 "순간"에만 내역/금액을 세팅하고 rerun
-        if sel != st.session_state.get(tpl_prev_key):
-            st.session_state[tpl_prev_key] = sel
-
-            if sel != "(직접 입력)":
-                tpl = template_by_display.get(sel)
-                if tpl:
-                    st.session_state[memo_key] = tpl["label"]
-                    amt = int(tpl["amount"])
-
-                    if tpl["kind"] == "deposit":
-                        _set_by_net(amt)
-                        st.session_state[mode_key] = "금액(+)"
-                    else:
-                        _set_by_net(-amt)
-                        st.session_state[mode_key] = "금액(-)"
-
-                    # ✅ 템플릿이 금액/모드를 자동으로 바꾼 직후 1회는 빠른금액 자동적용 스킵
-                    st.session_state[f"{prefix}_quick_skip_once"] = True
-
-            # ✅ 관리자 탭에서 템플릿 선택 즉시 화면에 반영되도록 강제 rerun
-            st.rerun()
-
-        st.text_input("내역", key=memo_key)
-
-        # -------------------------
-        # ✅ 빠른 금액(원형 버튼) + 모드(금액+/금액-)
-        # -------------------------
-        st.caption("⚡ 빠른 금액(원형 버튼)")
-        QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
-
-        st.radio("적용", ["금액(+)", "금액(-)"], horizontal=True, key=mode_key)
-
-        st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-
-        opts = [str(a) for a in QUICK_AMOUNTS]
-        pick_key = f"{prefix}_quick_pick"
-        pick = st.radio(
-            "빠른금액",
-            opts,
-            horizontal=True,
-            label_visibility="collapsed",
-            key=pick_key,
-        )
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ✅ 템플릿이 mode/금액을 "자동"으로 바꾸는 순간에는
-        # 빠른금액 자동 적용이 꼬일 수 있어서 1회 스킵 플래그를 둔다.
-        skip_key = f"{prefix}_quick_skip_once"
-        st.session_state.setdefault(skip_key, False)
-
-        # -------------------------
-        # 템플릿 적용 시: 스킵 플래그 ON
-        # -------------------------
-        # (위에서 템플릿을 적용하는 코드 바로 아래에 이 줄을 추가해야 함)
-        # -> 아래 "템플릿 적용 코드" 패치 2를 참고
-
-        apply_key = f"{prefix}_quick_apply_sig"
-        st.session_state.setdefault(apply_key, "")
-
-        # 지금 선택(픽) + 현재 모드(금액+/금액-) 를 합쳐서 시그니처로 만든다
-        sig = f"{pick}|{st.session_state.get(mode_key, '금액(+)')}"
-
-        # ✅ 템플릿 자동 세팅 직후에는 적용하지 않고, 기준값만 맞춰준다(1회)
-        if st.session_state.get(skip_key, False):
-            st.session_state[apply_key] = sig
-            st.session_state[skip_key] = False
-
-        else:
-            # ✅ 최초 1회는 "자동 적용"하지 않고 기준만 세팅 (처음 로딩 때 0 적용 방지)
-            if st.session_state.get(apply_key, "") == "":
-                st.session_state[apply_key] = sig
-            elif st.session_state.get(apply_key) != sig:
-                st.session_state[apply_key] = sig
-                _apply_amt(int(pick))
-                st.rerun()
-
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.number_input("입금", min_value=0, step=1, key=dep_key)
-        with c2:
-            st.number_input("출금", min_value=0, step=1, key=wd_key)
-
-        memo = str(st.session_state.get(memo_key, "") or "").strip()
-        dep = int(st.session_state.get(dep_key, 0) or 0)
-        wd = int(st.session_state.get(wd_key, 0) or 0)
-        return memo, dep, wd
 
     # -------------------------
     # ⚙️ 설정 탭
@@ -2220,128 +2198,58 @@ sub1, sub2, sub3 = st.tabs(["📝 거래", "💰 적금", "🎯 목표"])
 with sub1:
     st.subheader("📝 거래 기록(통장에 찍기)")
 
-    memo_key = f"memo_{name}"
-    dep_key = f"dep_{name}"
-    wd_key = f"wd_{name}"
-    tpl_sel_key = f"tpl_sel_{name}"
-    clear_flag = f"tx_clear_{name}"
-
-    st.session_state.setdefault(clear_flag, False)
-    st.session_state.setdefault(memo_key, "")
-    st.session_state.setdefault(dep_key, 0)
-    st.session_state.setdefault(wd_key, 0)
-    st.session_state.setdefault(tpl_sel_key, "(직접 입력)")
-
-    if st.session_state[clear_flag]:
-        st.session_state[memo_key] = ""
-        st.session_state[dep_key] = 0
-        st.session_state[wd_key] = 0
-        st.session_state[tpl_sel_key] = "(직접 입력)"
-        st.session_state[clear_flag] = False
-
-    labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in TEMPLATES]
-    sel = st.selectbox("내역 템플릿", labels, key=tpl_sel_key)
-
-    prev = st.session_state.tpl_prev.get(name)
-    if sel != prev:
-        st.session_state.tpl_prev[name] = sel
-        if sel != "(직접 입력)":
-            # ✅ [버그 수정 핵심] 사용자 거래 탭도 표시 문자열로 매핑
-            tpl = TEMPLATE_BY_DISPLAY.get(sel)
-            if tpl:
-                st.session_state[memo_key] = tpl["label"]
-                amt = int(tpl["amount"])
-                if tpl["kind"] == "deposit":
-                    st.session_state[dep_key] = amt
-                    st.session_state[wd_key] = 0
-                else:
-                    st.session_state[wd_key] = amt
-                    st.session_state[dep_key] = 0
-
-    st.text_input("내역", key=memo_key)
-
-    st.caption("⚡ 빠른 금액(원형 버튼)")
-
-    mode_key = f"quick_mode_{name}"
-    prev_key = f"quick_prev_{name}"
-    st.session_state.setdefault(mode_key, "금액(+)")
-    st.session_state.setdefault(prev_key, None)
-
-    def _get_net_user() -> int:
-        dep = int(st.session_state.get(dep_key, 0) or 0)
-        wd = int(st.session_state.get(wd_key, 0) or 0)
-        return dep - wd
-
-    def _set_by_net_user(net: int):
-        net = int(net or 0)
-        if net >= 0:
-            st.session_state[dep_key] = net
-            st.session_state[wd_key] = 0
-        else:
-            st.session_state[dep_key] = 0
-            st.session_state[wd_key] = -net
-
-    def _apply_amt_user(amt: int):
-        amt = int(amt or 0)
-
-        # ✅ 0은 초기화
-        if amt == 0:
-            st.session_state[dep_key] = 0
-            st.session_state[wd_key] = 0
-            return
-
-        sign = 1 if st.session_state[mode_key] == "금액(+)" else -1
-        net = _get_net_user() + (sign * amt)
-        _set_by_net_user(net)
-
-    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
-
-    st.radio("적용", ["금액(+)", "금액(-)"], horizontal=True, key=mode_key)
-
-    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-
-    opts = [str(a) for a in QUICK_AMOUNTS]
-    pick_key = f"quick_pick_{name}"
-    pick = st.radio(
-        "빠른금액",
-        opts,
-        horizontal=True,
-        label_visibility="collapsed",
-        key=pick_key,
+    # ✅ 사용자도 관리자 설정탭 입력 UI를 그대로 사용 (완전 동일 동작)
+    memo_u, dep_u, wd_u = render_admin_trade_ui(
+        prefix=f"user_trade_{name}",
+        templates_list=TEMPLATES,
+        template_by_display=TEMPLATE_BY_DISPLAY,
     )
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.session_state[prev_key] != pick:
-        st.session_state[prev_key] = pick
-        _apply_amt_user(int(pick))
-        st.rerun()
-
-    cA, cB = st.columns(2)
-    with cA:
-        st.number_input("입금", min_value=0, step=1, key=dep_key)
-    with cB:
-        st.number_input("출금", min_value=0, step=1, key=wd_key)
-
     col_btn1, col_btn2 = st.columns([1, 1])
+
     with col_btn1:
         if st.button("저장", key=f"save_{name}", use_container_width=True):
-            memo = st.session_state[memo_key].strip()
-            deposit = int(st.session_state[dep_key])
-            withdraw = int(st.session_state[wd_key])
+            memo = str(memo_u or "").strip()
+            deposit = int(dep_u or 0)
+            withdraw = int(wd_u or 0)
 
             if not memo:
                 st.error("내역을 입력해 주세요.")
             elif (deposit > 0 and withdraw > 0) or (deposit == 0 and withdraw == 0):
                 st.error("입금/출금은 둘 중 하나만 입력해 주세요.")
-            elif withdraw > 0 and withdraw > balance:
-                st.error("출금 금액이 현재 잔액보다 커요.")
             else:
+                # ✅ 일반 사용자 출금은 잔액 부족이면 api_add_tx에서 막힘
                 res = api_add_tx(name, pin, memo, deposit, withdraw)
                 if res.get("ok"):
                     toast("저장 완료!", icon="✅")
-                    st.session_state[clear_flag] = True
-                    refresh_account_data(name, pin, force=True)
+
+                    # ✅ 속도 핵심: 전체 refresh_account_data(force=True) 제거
+                    # 1) 잔액만 즉시 반영
+                    new_bal = int(res.get("balance", balance) or balance)
+                    st.session_state.data.setdefault(name, {})
+                    st.session_state.data[name]["balance"] = new_bal
+
+                    # 2) 거래내역은 '가볍게' 120개만 다시 불러오기(빠름)
+                    if student_id:
+                        tx_res = api_get_txs_by_student_id(student_id, limit=120)
+                        if tx_res.get("ok"):
+                            df_new = pd.DataFrame(tx_res.get("rows", []))
+                            if not df_new.empty:
+                                df_new = df_new.sort_values("created_at_utc", ascending=False)
+                            st.session_state.data[name]["df_tx"] = df_new
+
+                    # 3) 입력값 초기화(설정탭 느낌으로 즉시 초기화)
+                    pfx = f"user_trade_{name}"
+                    st.session_state[f"{pfx}_memo"] = ""
+                    st.session_state[f"{pfx}_dep"] = 0
+                    st.session_state[f"{pfx}_wd"] = 0
+                    st.session_state[f"{pfx}_tpl"] = "(직접 입력)"
+                    st.session_state[f"{pfx}_tpl_prev"] = "(직접 입력)"
+                    st.session_state[f"{pfx}_mode"] = "금액(+)"
+                    st.session_state[f"{pfx}_quick_skip_once"] = False
+                    st.session_state[f"{pfx}_quick_apply_sig"] = ""
+                    st.session_state[f"{pfx}_quick_pick"] = "0"
+
                     st.rerun()
                 else:
                     st.error(res.get("error", "저장 실패"))
@@ -2350,6 +2258,9 @@ with sub1:
         if st.button("되돌리기(관리자)", key=f"undo_btn_{name}", use_container_width=True):
             st.session_state.undo_mode = not st.session_state.undo_mode
 
+    # -------------------------
+    # 되돌리기(관리자 전용) - 기존 로직 유지
+    # -------------------------
     if st.session_state.undo_mode:
         st.divider()
         st.subheader("↩️ 선택 되돌리기(관리자 전용)")
@@ -2374,12 +2285,12 @@ with sub1:
             selected_ids = []
             for _, r in view_df.iterrows():
                 tx_id = r["tx_id"]
-                memo = r["memo"]
+                memo2 = r["memo"]
                 dtkr = r["created_at_kr"]
-                dep = int(r["deposit"])
-                wd = int(r["withdraw"])
+                dep2 = int(r["deposit"])
+                wd2 = int(r["withdraw"])
                 can = bool(r["가능"])
-                label = f"{dtkr} | {memo} | +{dep} / -{wd}"
+                label = f"{dtkr} | {memo2} | +{dep2} / -{wd2}"
                 ck = st.checkbox(label, key=f"rb_ck_{name}_{tx_id}", disabled=(not can))
                 if ck and can:
                     selected_ids.append(tx_id)
@@ -2392,16 +2303,29 @@ with sub1:
                     elif not selected_ids:
                         st.warning("체크된 항목이 없어요.")
                     else:
-                        res = api_admin_rollback_selected(admin_pin2, student_id, selected_ids)
-                        if res.get("ok"):
-                            toast(f"선택 {res.get('undone')}건 되돌림 완료", icon="↩️")
-                            if res.get("message"):
-                                st.info(res["message"])
-                            refresh_account_data(name, pin, force=True)
+                        res2 = api_admin_rollback_selected(admin_pin2, student_id, selected_ids)
+                        if res2.get("ok"):
+                            toast(f"선택 {res2.get('undone')}건 되돌림 완료", icon="↩️")
+                            if res2.get("message"):
+                                st.info(res2["message"])
+
+                            # ✅ 되돌리기 후에는 거래내역이 중요하니 120개만 가볍게 갱신
+                            tx_res2 = api_get_txs_by_student_id(student_id, limit=120)
+                            if tx_res2.get("ok"):
+                                df_new2 = pd.DataFrame(tx_res2.get("rows", []))
+                                if not df_new2.empty:
+                                    df_new2 = df_new2.sort_values("created_at_utc", ascending=False)
+                                st.session_state.data[name]["df_tx"] = df_new2
+
+                            # 잔액도 같이 갱신(가볍게 balance만 다시 읽기)
+                            bal_res2 = api_get_balance(name, pin)
+                            if bal_res2.get("ok"):
+                                st.session_state.data[name]["balance"] = int(bal_res2.get("balance", 0) or 0)
+
                             st.session_state.undo_mode = False
                             st.rerun()
                         else:
-                            st.error(res.get("error", "되돌리기 실패"))
+                            st.error(res2.get("error", "되돌리기 실패"))
             with cY:
                 st.caption("※ ‘적금 가입/해지/만기’는 되돌리기에서 제외됩니다.")
 
@@ -2449,6 +2373,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
