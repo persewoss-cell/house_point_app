@@ -110,37 +110,27 @@ st.markdown(
     .tpl-simple .lab { font-weight: 800; }
     .tpl-simple .meta { color:#666; font-size: 0.92rem; margin-top: 2px; }
 
-    /* ✅ (교체) 빠른 금액 버튼: 입금/출금처럼 '알약(둥근) 버튼' + 클릭형 */
-    .round-btns div[data-testid="stButton"] > button {
-        border-radius: 9999px !important;     /* 알약 모양 */
-        width: 100% !important;               /* 칸을 꽉 채우는 버튼 */
-        min-width: 0 !important;
-        height: 2.15rem !important;
-        min-height: 2.15rem !important;
-        padding: 0.0rem 0.55rem !important;
-        font-size: 0.95rem !important;
-        line-height: 1 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-/* ✅ 빠른 금액 버튼: 진짜 원형 버튼 */
-.round-btns div[data-testid="stButton"] > button {
-    border-radius: 50% !important;
-    aspect-ratio: 1 / 1 !important;   /* 정사각형 유지 → 원형 */
+/* ✅ 빠른 금액: radiogroup 라벨을 "원형 버튼"처럼 */
+.round-btns div[role="radiogroup"]{
+    gap: 0.35rem !important;
+}
+
+.round-btns div[role="radiogroup"] > label{
+    border-radius: 9999px !important;
+    padding: 0 !important;
     width: 2.6rem !important;
     height: 2.6rem !important;
     min-width: 2.6rem !important;
     min-height: 2.6rem !important;
-    padding: 0 !important;
-    font-size: 0.95rem !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    font-size: 0.95rem !important;
+    line-height: 1 !important;
 }
 
 @media (max-width: 768px){
-    .round-btns div[data-testid="stButton"] > button {
+    .round-btns div[role="radiogroup"] > label{
         width: 3.1rem !important;
         height: 3.1rem !important;
         min-width: 3.1rem !important;
@@ -1601,14 +1591,25 @@ if st.session_state.admin_ok:
                 st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
                 st.session_state[dep_key] = 0
 
-        st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-        btn_cols = st.columns(len(QUICK_AMOUNTS))
-        for j, amt in enumerate(QUICK_AMOUNTS):
-            label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
-            if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
-                _apply_amt(amt)
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+
+# radio를 버튼처럼 사용(원형 CSS 적용됨)
+opts = [str(a) for a in QUICK_AMOUNTS]
+pick = st.radio(
+    "빠른금액",
+    opts,
+    horizontal=True,
+    label_visibility="collapsed",
+    key=f"{quick_key}_radio",
+)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# 선택값 적용
+amt = int(pick)
+# 0은 즉시 리셋
+_apply_user_amount(amt)
+st.rerun()
 
         # 캡쳐처럼 "금액 초기화" 유지
         if st.button("금액 초기화", key=f"{prefix}_reset_btn", use_container_width=True):
@@ -2239,14 +2240,22 @@ with sub1:
             st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
             st.session_state[dep_key] = 0
 
-    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-    btn_cols = st.columns(len(QUICK_AMOUNTS))
-    for j, amt in enumerate(QUICK_AMOUNTS):
-        label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
-        if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
-            _apply_user_amount(amt)
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+
+opts = [str(a) for a in QUICK_AMOUNTS]
+pick = st.radio(
+    "빠른금액",
+    opts,
+    horizontal=True,
+    label_visibility="collapsed",
+    key=f"{quick_key}_radio",
+)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+amt = int(pick)
+_apply_amt(amt)
+st.rerun()
 
     if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
         st.session_state[dep_key] = 0
@@ -2386,6 +2395,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
