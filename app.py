@@ -1591,7 +1591,14 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
 
     st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
     opts = [str(a) for a in QUICK_AMOUNTS]
-    pick_key = f"{prefix}_quick_pick"
+
+    # ✅ (패치) 모드 변경 시 빠른금액 라디오를 "새로 생성"해서 기본값 0으로 리셋하기 위한 nonce
+    nonce_key = f"{prefix}_quick_pick_nonce"
+    st.session_state.setdefault(nonce_key, 0)
+
+    pick_key = f"{prefix}_quick_pick_{st.session_state[nonce_key]}"
+    st.session_state.setdefault(pick_key, "0")  # 새 라디오의 기본 선택값
+
     pick = st.radio(
         "빠른금액",
         opts,
@@ -1626,15 +1633,17 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
         prev_pick = str(st.session_state.get(pick_prev_key, cur_pick))
 
         # 1) 모드만 바뀐 경우:
-        #    ✅ 계산은 하지 않되, "빠른금액 선택"을 0으로 리셋해서
-        #    다음 숫자 클릭이 항상 새로 적용되도록 한다.
+        #    ✅ 계산은 하지 않음
+        #    ✅ 빠른금액(원형 숫자) 선택은 0으로 리셋(라디오 위젯을 새로 만들어서)
         if cur_mode != prev_mode:
             st.session_state[mode_prev_key] = cur_mode
 
-            # ✅ 원형 숫자 버튼 선택을 0으로 되돌리기(시각적으로도 0 선택)
-            st.session_state[pick_key] = "0"
+            # ✅ 라디오 key를 바꿔서 위젯 자체를 새로 생성 → 기본값 "0"
+            st.session_state[nonce_key] = int(st.session_state.get(nonce_key, 0)) + 1
+            new_pick_key = f"{prefix}_quick_pick_{st.session_state[nonce_key]}"
+            st.session_state[new_pick_key] = "0"
 
-            # ✅ prev들도 0으로 맞춰서 다음 클릭이 정상 반영되게
+            # ✅ prev도 0으로 맞춰서 다음 숫자 클릭이 정상 반영되게
             st.session_state[pick_prev_key] = "0"
 
             st.rerun()
@@ -2398,6 +2407,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
