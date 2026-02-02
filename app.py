@@ -1534,21 +1534,25 @@ if st.session_state.admin_ok:
     # -------------------------
     # ✅ 공용: 관리자용 거래 입력 UI (캡쳐와 동일 형태)
     # -------------------------
+    # -------------------------
+    # ✅ 공용: 관리자용 거래 입력 UI (원형 버튼 + 템플릿 반영)
+    # -------------------------
     def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display: dict):
         memo_key = f"{prefix}_memo"
         dep_key = f"{prefix}_dep"
         wd_key = f"{prefix}_wd"
         tpl_key = f"{prefix}_tpl"
         mode_key = f"{prefix}_mode"
-        quick_key = f"{prefix}_quick"
+        prev_key = f"{prefix}_quick_prev"
 
         st.session_state.setdefault(memo_key, "")
         st.session_state.setdefault(dep_key, 0)
         st.session_state.setdefault(wd_key, 0)
         st.session_state.setdefault(tpl_key, "(직접 입력)")
         st.session_state.setdefault(mode_key, "입금(+)")
-        st.session_state.setdefault(quick_key, 0)
+        st.session_state.setdefault(prev_key, None)
 
+        # 템플릿
         tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
         sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
 
@@ -1569,6 +1573,7 @@ if st.session_state.admin_ok:
 
         st.text_input("내역", key=memo_key)
 
+        # 빠른 금액
         st.caption("⚡ 빠른 금액(원형 버튼)")
         QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
 
@@ -1576,13 +1581,11 @@ if st.session_state.admin_ok:
 
         def _apply_amt(amt: int):
             amt = int(amt or 0)
+
             if amt == 0:
                 st.session_state[dep_key] = 0
                 st.session_state[wd_key] = 0
-                st.session_state[quick_key] = 0
                 return
-
-            st.session_state[quick_key] = amt
 
             if st.session_state[mode_key] == "입금(+)":
                 st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
@@ -1591,36 +1594,25 @@ if st.session_state.admin_ok:
                 st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
                 st.session_state[dep_key] = 0
 
-    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+        # 원형 버튼 UI
+        st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
 
-    opts = [str(a) for a in QUICK_AMOUNTS]
-    pick_key = f"{quick_key}_radio"
-    prev_key = f"{quick_key}_radio_prev"
+        opts = [str(a) for a in QUICK_AMOUNTS]
+        pick_key = f"{prefix}_quick_pick"
+        pick = st.radio(
+            "빠른금액",
+            opts,
+            horizontal=True,
+            label_visibility="collapsed",
+            key=pick_key,
+        )
 
-    if prev_key not in st.session_state:
-        st.session_state[prev_key] = None
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    pick = st.radio(
-        "빠른금액",
-        opts,
-        horizontal=True,
-        label_visibility="collapsed",
-        key=pick_key,
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # 선택값이 바뀌었을 때만 적용 + rerun (무한 rerun 방지)
-    if st.session_state[prev_key] != pick:
-        st.session_state[prev_key] = pick
-        _apply_user_amount(int(pick))
-        st.rerun()
-
-        # 캡쳐처럼 "금액 초기화" 유지
-        if st.button("금액 초기화", key=f"{prefix}_reset_btn", use_container_width=True):
-            st.session_state[dep_key] = 0
-            st.session_state[wd_key] = 0
-            st.session_state[quick_key] = 0
+        # 선택값이 바뀌었을 때만 적용 + rerun
+        if st.session_state[prev_key] != pick:
+            st.session_state[prev_key] = pick
+            _apply_amt(int(pick))
             st.rerun()
 
         c1, c2 = st.columns(2)
@@ -2408,6 +2400,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
