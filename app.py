@@ -1621,11 +1621,23 @@ if st.session_state.admin_ok:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ✅ 선택값이 바뀌었을 때만 적용 + rerun
-        if st.session_state[prev_key] != pick:
-            st.session_state[prev_key] = pick
-            _apply_amt(int(pick))
-            st.rerun()
+        # ✅ radio는 같은 숫자를 다시 눌러도 이벤트가 안 생기므로
+        # 한 번 적용 후 선택값을 '0'으로 되돌려 다음 클릭이 다시 동작하게 만듦
+        reset_flag_key = f"{prefix}_quick_reset_flag"
+        st.session_state.setdefault(reset_flag_key, False)
+
+        if st.session_state[reset_flag_key]:
+            # 방금 0으로 되돌린 직후 → 0은 적용하지 않음
+            st.session_state[reset_flag_key] = False
+        else:
+            if st.session_state[prev_key] != pick:
+                st.session_state[prev_key] = pick
+                _apply_amt(int(pick))
+
+                # 다음에 같은 숫자를 또 눌러도 동작하도록 radio를 0으로 복귀
+                st.session_state[reset_flag_key] = True
+                st.session_state[pick_key] = "0"
+                st.rerun()
 
         c1, c2 = st.columns(2)
         with c1:
@@ -2409,6 +2421,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
