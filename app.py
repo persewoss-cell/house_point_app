@@ -260,6 +260,50 @@ def savings_active_total(savings_list: list[dict]) -> int:
     )
 
 
+# ✅ 빠른금액(원형버튼) 공용: "계산기"처럼 +/− 누르면 순차 반영
+def apply_signed_delta(dep_key: str, wd_key: str, delta: int):
+    delta = int(delta or 0)
+
+    if delta == 0:
+        st.session_state[dep_key] = 0
+        st.session_state[wd_key] = 0
+        return
+
+    dep = int(st.session_state.get(dep_key, 0) or 0)
+    wd = int(st.session_state.get(wd_key, 0) or 0)
+
+    net = dep - wd
+    net += delta
+
+    st.session_state[dep_key] = max(net, 0)
+    st.session_state[wd_key] = max(-net, 0)
+
+
+def render_round_amount_buttons(prefix: str, dep_key: str, wd_key: str):
+    pos_row = [0, 10, 20, 50, 100, 200, 500, 1000]
+    neg_row = [-10, -20, -50, -100, -200, -500, -1000]
+
+    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+
+    # 1줄: 양수(및 0)
+    cols1 = st.columns(len(pos_row))
+    for i, amt in enumerate(pos_row):
+        label = "0" if amt == 0 else f"{amt}"
+        if cols1[i].button(label, key=f"{prefix}_amtbtn_pos_{amt}", use_container_width=True):
+            apply_signed_delta(dep_key, wd_key, amt)
+            st.rerun()
+
+    # 2줄: 음수
+    cols2 = st.columns(len(neg_row))
+    for i, amt in enumerate(neg_row):
+        label = f"{amt}"
+        if cols2[i].button(label, key=f"{prefix}_amtbtn_neg_{amt}", use_container_width=True):
+            apply_signed_delta(dep_key, wd_key, amt)
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 # =========================
 # Firestore helpers
 # =========================
@@ -1544,15 +1588,11 @@ if st.session_state.admin_ok:
             dep_key = f"{prefix}_dep"
             wd_key = f"{prefix}_wd"
             tpl_key = f"{prefix}_tpl"
-            mode_key = f"{prefix}_mode"
-            quick_key = f"{prefix}_quick"
 
             st.session_state.setdefault(memo_key, "")
             st.session_state.setdefault(dep_key, 0)
             st.session_state.setdefault(wd_key, 0)
             st.session_state.setdefault(tpl_key, "(직접 입력)")
-            st.session_state.setdefault(mode_key, "입금(+)")
-            st.session_state.setdefault(quick_key, 0)
 
             sel = st.selectbox("내역 템플릿", tpl_labels3, key=tpl_key)
             if sel != "(직접 입력)":
@@ -1563,49 +1603,14 @@ if st.session_state.admin_ok:
                     if tpl["kind"] == "deposit":
                         st.session_state[dep_key] = amt
                         st.session_state[wd_key] = 0
-                        st.session_state[mode_key] = "입금(+)"
                     else:
                         st.session_state[wd_key] = amt
                         st.session_state[dep_key] = 0
-                        st.session_state[mode_key] = "출금(-)"
 
             st.text_input("내역(메모)", key=memo_key)
 
-            QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
-            st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
-
-            def _apply():
-                amt = int(st.session_state.get(quick_key, 0) or 0)
-                if amt == 0:
-                    st.session_state[dep_key] = 0
-                    st.session_state[wd_key] = 0
-                    return
-                if st.session_state[mode_key] == "입금(+)":
-                    st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
-                    st.session_state[wd_key] = 0
-                else:
-                    st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
-                    st.session_state[dep_key] = 0
-
-            def _fmt_amt(x):
-                if x == 0:
-                    return "0"
-                return f"-{x}" if st.session_state[mode_key] == "출금(-)" else f"{x}"
-
-            st.radio(
-                "금액 선택",
-                QUICK_AMOUNTS,
-                horizontal=True,
-                key=quick_key,
-                format_func=_fmt_amt,
-                on_change=_apply,
-            )
-
-            if st.button("금액 초기화", key=f"{prefix}_reset_btn", use_container_width=True):
-                st.session_state[dep_key] = 0
-                st.session_state[wd_key] = 0
-                st.session_state[quick_key] = 0
-                st.rerun()
+            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)")
+            render_round_amount_buttons(prefix=f"{prefix}_round", dep_key=dep_key, wd_key=wd_key)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -2081,15 +2086,11 @@ if st.session_state.admin_ok:
             dep_key = f"admin_ind_dep_{sid}"
             wd_key = f"admin_ind_wd_{sid}"
             tpl_key = f"admin_ind_tpl_{sid}"
-            mode_key = f"admin_ind_mode_{sid}"
-            quick_key = f"admin_ind_quick_{sid}"
 
             st.session_state.setdefault(memo_key, "")
             st.session_state.setdefault(dep_key, 0)
             st.session_state.setdefault(wd_key, 0)
             st.session_state.setdefault(tpl_key, "(직접 입력)")
-            st.session_state.setdefault(mode_key, "입금(+)")
-            st.session_state.setdefault(quick_key, 0)
 
             tpl_labels_ind = ["(직접 입력)"] + [template_display_for_trade(t) for t in TEMPLATES]
             sel_ind = st.selectbox("내역 템플릿", tpl_labels_ind, key=tpl_key)
@@ -2103,44 +2104,14 @@ if st.session_state.admin_ok:
                     if tpl["kind"] == "deposit":
                         st.session_state[dep_key] = amt
                         st.session_state[wd_key] = 0
-                        st.session_state[mode_key] = "입금(+)"
                     else:
                         st.session_state[wd_key] = amt
                         st.session_state[dep_key] = 0
-                        st.session_state[mode_key] = "출금(-)"
 
             st.text_input("내역(메모)", key=memo_key)
 
-            QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
-            st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
-
-            st.caption("⚡ 빠른 금액(클릭할 때마다 누적)")
-
-            def _apply_individual_amount(amt: int):
-                amt = int(amt or 0)
-                if amt == 0:
-                    st.session_state[dep_key] = 0
-                    st.session_state[wd_key] = 0
-                    st.session_state[quick_key] = 0
-                    return
-
-                st.session_state[quick_key] = amt
-
-                if st.session_state[mode_key] == "입금(+)":
-                    st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
-                    st.session_state[wd_key] = 0
-                else:
-                    st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
-                    st.session_state[dep_key] = 0
-
-            st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-            btn_cols = st.columns(len(QUICK_AMOUNTS))
-            for j, amt in enumerate(QUICK_AMOUNTS):
-                label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
-                if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
-                    _apply_individual_amount(amt)
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)")
+            render_round_amount_buttons(prefix=f"admin_ind_round_{sid}", dep_key=dep_key, wd_key=wd_key)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -2256,48 +2227,8 @@ with sub1:
 
     st.text_input("내역", key=memo_key)
 
-    st.caption("⚡ 빠른 금액(원형 버튼)")
-    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
-    mode_key = f"quick_mode_{name}"
-    if mode_key not in st.session_state:
-        st.session_state[mode_key] = "입금(+)"
-
-    st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
-
-    quick_key = f"quick_amt_{name}"
-    st.session_state.setdefault(quick_key, 0)
-
-    def _apply_user_amount(amt: int):
-        amt = int(amt or 0)
-        if amt == 0:
-            st.session_state[dep_key] = 0
-            st.session_state[wd_key] = 0
-            st.session_state[quick_key] = 0
-            return
-
-        st.session_state[quick_key] = amt
-
-        if st.session_state[mode_key] == "입금(+)":
-            st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
-            st.session_state[wd_key] = 0
-        else:
-            st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
-            st.session_state[dep_key] = 0
-
-    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-    btn_cols = st.columns(len(QUICK_AMOUNTS))
-    for j, amt in enumerate(QUICK_AMOUNTS):
-        label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
-        if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
-            _apply_user_amount(amt)
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
-        st.session_state[dep_key] = 0
-        st.session_state[wd_key] = 0
-        st.session_state[quick_key] = 0
-        st.rerun()
+    st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)")
+    render_round_amount_buttons(prefix=f"user_round_{name}", dep_key=dep_key, wd_key=wd_key)
 
     cA, cB = st.columns(2)
     with cA:
