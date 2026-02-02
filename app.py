@@ -109,6 +109,26 @@ st.markdown(
     .tpl-simple .idx { font-weight: 900; margin-right: 8px; }
     .tpl-simple .lab { font-weight: 800; }
     .tpl-simple .meta { color:#666; font-size: 0.92rem; margin-top: 2px; }
+
+    /* ✅ (추가) 빠른 금액 "원형 버튼" 전용 */
+    .round-btns div[data-testid="stButton"] > button {
+        border-radius: 9999px !important;
+        width: 2.35rem !important;
+        min-width: 2.35rem !important;
+        height: 2.35rem !important;
+        min-height: 2.35rem !important;
+        padding: 0 !important;
+        font-size: 0.90rem !important;
+    }
+    @media (max-width: 768px){
+        .round-btns div[data-testid="stButton"] > button {
+            width: 2.65rem !important;
+            min-width: 2.65rem !important;
+            height: 2.65rem !important;
+            min-height: 2.65rem !important;
+            font-size: 0.95rem !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1292,7 +1312,6 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
         st.caption("설정된 목표가 없습니다.")
         return
 
-    # 목표 날짜 파싱(없으면 그냥 진행률만)
     goal_date = None
     if goal_date_str:
         try:
@@ -1324,7 +1343,10 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
         st.write(f"- 목표 날짜: **{goal_date_str}**")
 
     st.progress(exp_ratio)
-    st.write(f"예상 달성률(현재 잔액 + 목표일 전 만기 적금): **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
+    st.write(
+        f"예상 달성률(현재 잔액 + 목표일 전 만기 적금): **{exp_ratio*100:.1f}%** "
+        f"(예상 {expected_amount} / 목표 {goal_amount})"
+    )
 
     if goal_date and bonus > 0:
         st.caption(f"※ 목표일({goal_date.isoformat()}) 전 만기 적금 수령액(원금+이자) +{bonus} 포함")
@@ -1394,14 +1416,16 @@ qp = st.query_params
 saved_name = str(qp.get("saved_name", "") or "")
 
 if not st.session_state.logged_in:
-    login_c1, login_c2, login_c3 = st.columns([2, 2, 1])
-    with login_c1:
-        login_name = st.text_input("이름", value=saved_name, key="login_name_input").strip()
-        remember = st.checkbox("이름 저장", value=bool(saved_name), key="remember_name")
-    with login_c2:
-        login_pin = st.text_input("비밀번호(4자리)", type="password", key="login_pin_input").strip()
-    with login_c3:
-        login_btn = st.button("로그인", use_container_width=True)
+    # ✅ Enter로 로그인 제출 가능하도록 form 사용
+    with st.form("login_form", clear_on_submit=False):
+        login_c1, login_c2, login_c3 = st.columns([2, 2, 1])
+        with login_c1:
+            login_name = st.text_input("이름", value=saved_name, key="login_name_input").strip()
+            remember = st.checkbox("이름 저장", value=bool(saved_name), key="remember_name")
+        with login_c2:
+            login_pin = st.text_input("비밀번호(4자리)", type="password", key="login_pin_input").strip()
+        with login_c3:
+            login_btn = st.form_submit_button("로그인", use_container_width=True)
 
     if login_btn:
         if not login_name:
@@ -2090,12 +2114,7 @@ if st.session_state.admin_ok:
             QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
             st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
 
-            # =========================
-            # ✅ [수정된 부분] 금액 선택을 radio → 버튼으로 변경
-            # - radio는 같은 값을 다시 클릭해도 on_change가 안 떠서 "누를 때마다 누적"이 불가
-            # - 버튼은 매 클릭마다 누적 가능
-            # =========================
-            st.caption("⚡ 금액 선택(클릭할 때마다 누적)")
+            st.caption("⚡ 빠른 금액(클릭할 때마다 누적)")
 
             def _apply_individual_amount(amt: int):
                 amt = int(amt or 0)
@@ -2105,7 +2124,6 @@ if st.session_state.admin_ok:
                     st.session_state[quick_key] = 0
                     return
 
-                # 표시용(선택값 저장)만 업데이트
                 st.session_state[quick_key] = amt
 
                 if st.session_state[mode_key] == "입금(+)":
@@ -2115,12 +2133,14 @@ if st.session_state.admin_ok:
                     st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
                     st.session_state[dep_key] = 0
 
+            st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
             btn_cols = st.columns(len(QUICK_AMOUNTS))
             for j, amt in enumerate(QUICK_AMOUNTS):
                 label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
                 if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
                     _apply_individual_amount(amt)
                     st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -2236,7 +2256,7 @@ with sub1:
 
     st.text_input("내역", key=memo_key)
 
-    st.caption("⚡ 빠른 금액")
+    st.caption("⚡ 빠른 금액(원형 버튼)")
     QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
     mode_key = f"quick_mode_{name}"
     if mode_key not in st.session_state:
@@ -2244,12 +2264,19 @@ with sub1:
 
     st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
 
-    def _apply_quick_amount():
-        amt = int(st.session_state.get(f"quick_amt_{name}", 0) or 0)
+    quick_key = f"quick_amt_{name}"
+    st.session_state.setdefault(quick_key, 0)
+
+    def _apply_user_amount(amt: int):
+        amt = int(amt or 0)
         if amt == 0:
             st.session_state[dep_key] = 0
             st.session_state[wd_key] = 0
+            st.session_state[quick_key] = 0
             return
+
+        st.session_state[quick_key] = amt
+
         if st.session_state[mode_key] == "입금(+)":
             st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
             st.session_state[wd_key] = 0
@@ -2257,23 +2284,19 @@ with sub1:
             st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
             st.session_state[dep_key] = 0
 
-    def _fmt_amt(x):
-        if x == 0:
-            return "0"
-        return f"-{x}" if st.session_state[mode_key] == "출금(-)" else f"{x}"
-
-    st.radio(
-        "금액 선택",
-        QUICK_AMOUNTS,
-        horizontal=True,
-        key=f"quick_amt_{name}",
-        format_func=_fmt_amt,
-        on_change=_apply_quick_amount,
-    )
+    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+    btn_cols = st.columns(len(QUICK_AMOUNTS))
+    for j, amt in enumerate(QUICK_AMOUNTS):
+        label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
+        if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
+            _apply_user_amount(amt)
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
         st.session_state[dep_key] = 0
         st.session_state[wd_key] = 0
+        st.session_state[quick_key] = 0
         st.rerun()
 
     cA, cB = st.columns(2)
