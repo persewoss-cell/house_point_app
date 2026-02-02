@@ -1591,25 +1591,30 @@ if st.session_state.admin_ok:
                 st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
                 st.session_state[dep_key] = 0
 
-st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
 
-# radio를 버튼처럼 사용(원형 CSS 적용됨)
-opts = [str(a) for a in QUICK_AMOUNTS]
-pick = st.radio(
-    "빠른금액",
-    opts,
-    horizontal=True,
-    label_visibility="collapsed",
-    key=f"{quick_key}_radio",
-)
+    opts = [str(a) for a in QUICK_AMOUNTS]
+    pick_key = f"{quick_key}_radio"
+    prev_key = f"{quick_key}_radio_prev"
 
-st.markdown("</div>", unsafe_allow_html=True)
+    if prev_key not in st.session_state:
+        st.session_state[prev_key] = None
 
-# 선택값 적용
-amt = int(pick)
-# 0은 즉시 리셋
-_apply_user_amount(amt)
-st.rerun()
+    pick = st.radio(
+        "빠른금액",
+        opts,
+        horizontal=True,
+        label_visibility="collapsed",
+        key=pick_key,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # 선택값이 바뀌었을 때만 적용 + rerun (무한 rerun 방지)
+    if st.session_state[prev_key] != pick:
+        st.session_state[prev_key] = pick
+        _apply_user_amount(int(pick))
+        st.rerun()
 
         # 캡쳐처럼 "금액 초기화" 유지
         if st.button("금액 초기화", key=f"{prefix}_reset_btn", use_container_width=True):
@@ -2240,22 +2245,30 @@ with sub1:
             st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
             st.session_state[dep_key] = 0
 
-st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+        st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
 
-opts = [str(a) for a in QUICK_AMOUNTS]
-pick = st.radio(
-    "빠른금액",
-    opts,
-    horizontal=True,
-    label_visibility="collapsed",
-    key=f"{quick_key}_radio",
-)
+        opts = [str(a) for a in QUICK_AMOUNTS]
+        pick_key = f"{prefix}_quick_pick"
+        prev_key = f"{prefix}_quick_pick_prev"
 
-st.markdown("</div>", unsafe_allow_html=True)
+        if prev_key not in st.session_state:
+            st.session_state[prev_key] = None
 
-amt = int(pick)
-_apply_amt(amt)
-st.rerun()
+        pick = st.radio(
+            "빠른금액",
+            opts,
+            horizontal=True,
+            label_visibility="collapsed",
+            key=pick_key,
+        )
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # 선택값이 바뀌었을 때만 적용 + rerun (무한 rerun 방지)
+        if st.session_state[prev_key] != pick:
+            st.session_state[prev_key] = pick
+            _apply_amt(int(pick))
+            st.rerun()
 
     if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
         st.session_state[dep_key] = 0
@@ -2395,6 +2408,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
