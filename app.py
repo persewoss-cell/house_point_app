@@ -1604,20 +1604,36 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
     skip_key = f"{prefix}_quick_skip_once"
     st.session_state.setdefault(skip_key, False)
 
-    apply_key = f"{prefix}_quick_apply_sig"
-    st.session_state.setdefault(apply_key, "")
+    # ✅ (패치) 모드 변경 시에는 즉시 반영하지 않고,
+    # 숫자(빠른금액)를 "다시 선택/변경"했을 때만 반영한다.
+    mode_prev_key = f"{prefix}_quick_mode_prev"
+    pick_prev_key = f"{prefix}_quick_pick_prev"
 
-    sig = f"{pick}|{st.session_state.get(mode_key, '금액(+)')}"
+    cur_mode = str(st.session_state.get(mode_key, "금액(+)"))
+    cur_pick = str(pick)
 
+    st.session_state.setdefault(mode_prev_key, cur_mode)
+    st.session_state.setdefault(pick_prev_key, cur_pick)
+
+    # ✅ 템플릿 자동세팅 직후 1회는 반영 스킵(기존 동작 유지)
     if st.session_state.get(skip_key, False):
-        st.session_state[apply_key] = sig
+        st.session_state[mode_prev_key] = cur_mode
+        st.session_state[pick_prev_key] = cur_pick
         st.session_state[skip_key] = False
+
     else:
-        if st.session_state.get(apply_key, "") == "":
-            st.session_state[apply_key] = sig
-        elif st.session_state.get(apply_key) != sig:
-            st.session_state[apply_key] = sig
-            _apply_amt(int(pick))
+        prev_mode = str(st.session_state.get(mode_prev_key, cur_mode))
+        prev_pick = str(st.session_state.get(pick_prev_key, cur_pick))
+
+        # 1) 모드만 바뀐 경우: ✅ 계산 금지 (기준값만 갱신)
+        if cur_mode != prev_mode:
+            st.session_state[mode_prev_key] = cur_mode
+            st.session_state[pick_prev_key] = cur_pick
+
+        # 2) 숫자가 바뀐 경우: ✅ 이때만 계산
+        elif cur_pick != prev_pick:
+            st.session_state[pick_prev_key] = cur_pick
+            _apply_amt(int(cur_pick))
             st.rerun()
 
     c1, c2 = st.columns(2)
@@ -2373,6 +2389,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
