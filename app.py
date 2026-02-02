@@ -2143,11 +2143,35 @@ if st.session_state.admin_ok:
         with tabs[i]:
             nm, sid = a["name"], a["student_id"]
 
-            txr = api_get_txs_by_student_id(sid, limit=300)
-            df_tx = pd.DataFrame(txr.get("rows", [])) if txr.get("ok") else pd.DataFrame()
+            # ✅ (속도) 숫자 버튼 누를 때마다 Firestore 조회하지 않게:
+            # 통장내역/적금은 "펼쳤을 때만" 불러오도록 변경
+            df_tx = pd.DataFrame()
+            savings = []
 
-            sres = api_savings_list_by_student_id(sid)
-            savings = sres.get("savings", []) if sres.get("ok") else []
+            bal_now = int(a.get("balance", 0) or 0)
+
+            st.subheader(f"👤 {nm}")
+            render_asset_summary(bal_now, savings)  # 적금은 아래 expander에서 불러오면 다시 표시됨(요약은 잔액 중심)
+
+            with st.expander("📒 통장내역 보기", expanded=False):
+                txr = api_get_txs_by_student_id(sid, limit=300)
+                if not txr.get("ok"):
+                    st.error(txr.get("error", "내역을 불러오지 못했어요."))
+                else:
+                    df_tx = pd.DataFrame(txr.get("rows", []))
+                    if not df_tx.empty:
+                        df_tx = df_tx.sort_values("created_at_utc", ascending=False)
+                        render_tx_table(df_tx)
+
+            with st.expander("💰 적금/목표 보기", expanded=False):
+                sres = api_savings_list_by_student_id(sid)
+                savings = sres.get("savings", []) if sres.get("ok") else []
+                sv_total = savings_active_total(savings)
+                asset_total = bal_now + sv_total
+                st.caption(f"내자산 {asset_total} · 잔액 {bal_now} · 적금 {sv_total}")
+                render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=bal_now)
+                st.divider()
+                render_goal_readonly_admin(student_id=sid, balance_now=bal_now, savings=savings)
 
             bal_now = int(a.get("balance", 0) or 0)
 
@@ -2205,7 +2229,7 @@ mat = maybe_check_maturities(name, pin)
 if mat and mat.get("ok") and mat.get("matured_count", 0) > 0:
     st.success(f"🎉 만기 도착! 적금 {mat['matured_count']}건 자동 반환 (+{mat['paid_total']} 포인트)")
 
-refresh_account_data(name, pin, force=True)
+refresh_account_data(name, pin, force=False)
 slot = st.session_state.data.get(name, {})
 if slot.get("error"):
     st.error(slot["error"])
@@ -2407,6 +2431,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
