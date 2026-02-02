@@ -1542,59 +1542,71 @@ if st.session_state.admin_ok:
         dep_key = f"{prefix}_dep"
         wd_key = f"{prefix}_wd"
         tpl_key = f"{prefix}_tpl"
-        mode_key = f"{prefix}_mode"
-        prev_key = f"{prefix}_quick_prev"
+        mode_key = f"{prefix}_mode"          # ✅ 모드 버튼 유지
+        prev_key = f"{prefix}_quick_prev"    # ✅ 무한 rerun 방지
 
         st.session_state.setdefault(memo_key, "")
         st.session_state.setdefault(dep_key, 0)
         st.session_state.setdefault(wd_key, 0)
         st.session_state.setdefault(tpl_key, "(직접 입력)")
-        st.session_state.setdefault(mode_key, "입금(+)")
+        st.session_state.setdefault(mode_key, "금액(+)")
         st.session_state.setdefault(prev_key, None)
 
+        def _get_net() -> int:
+            dep = int(st.session_state.get(dep_key, 0) or 0)
+            wd = int(st.session_state.get(wd_key, 0) or 0)
+            return dep - wd
+
+        def _set_by_net(net: int):
+            net = int(net or 0)
+            if net >= 0:
+                st.session_state[dep_key] = net
+                st.session_state[wd_key] = 0
+            else:
+                st.session_state[dep_key] = 0
+                st.session_state[wd_key] = -net
+
+        def _apply_amt(amt: int):
+            amt = int(amt or 0)
+
+            # ✅ 0은 초기화(둘 다 0)
+            if amt == 0:
+                st.session_state[dep_key] = 0
+                st.session_state[wd_key] = 0
+                return
+
+            sign = 1 if st.session_state[mode_key] == "금액(+)" else -1
+            net = _get_net() + (sign * amt)
+            _set_by_net(net)
+
+        # -------------------------
         # 템플릿
+        # -------------------------
         tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
         sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
 
-        # 템플릿 선택 시 메모/금액/모드 자동 반영
         if sel != "(직접 입력)":
             tpl = template_by_display.get(sel)
             if tpl:
                 st.session_state[memo_key] = tpl["label"]
                 amt = int(tpl["amount"])
                 if tpl["kind"] == "deposit":
-                    st.session_state[dep_key] = amt
-                    st.session_state[wd_key] = 0
-                    st.session_state[mode_key] = "입금(+)"
+                    _set_by_net(amt)
+                    st.session_state[mode_key] = "금액(+)"
                 else:
-                    st.session_state[wd_key] = amt
-                    st.session_state[dep_key] = 0
-                    st.session_state[mode_key] = "출금(-)"
+                    _set_by_net(-amt)
+                    st.session_state[mode_key] = "금액(-)"
 
         st.text_input("내역", key=memo_key)
 
-        # 빠른 금액
+        # -------------------------
+        # ✅ 빠른 금액(원형 버튼) + 모드(금액+/금액-)
+        # -------------------------
         st.caption("⚡ 빠른 금액(원형 버튼)")
         QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
 
-        st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
+        st.radio("적용", ["금액(+)", "금액(-)"], horizontal=True, key=mode_key)
 
-        def _apply_amt(amt: int):
-            amt = int(amt or 0)
-
-            if amt == 0:
-                st.session_state[dep_key] = 0
-                st.session_state[wd_key] = 0
-                return
-
-            if st.session_state[mode_key] == "입금(+)":
-                st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
-                st.session_state[wd_key] = 0
-            else:
-                st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
-                st.session_state[dep_key] = 0
-
-        # 원형 버튼 UI
         st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
 
         opts = [str(a) for a in QUICK_AMOUNTS]
@@ -1609,7 +1621,7 @@ if st.session_state.admin_ok:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 선택값이 바뀌었을 때만 적용 + rerun
+        # ✅ 선택값이 바뀌었을 때만 적용 + rerun
         if st.session_state[prev_key] != pick:
             st.session_state[prev_key] = pick
             _apply_amt(int(pick))
@@ -1624,7 +1636,6 @@ if st.session_state.admin_ok:
         memo = str(st.session_state.get(memo_key, "") or "").strip()
         dep = int(st.session_state.get(dep_key, 0) or 0)
         wd = int(st.session_state.get(wd_key, 0) or 0)
-
         return memo, dep, wd
 
     # -------------------------
@@ -2400,6 +2411,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
