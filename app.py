@@ -1596,7 +1596,10 @@ if st.session_state.admin_ok:
                 else:
                     _set_by_net(-amt)
                     st.session_state[mode_key] = "금액(-)"
-
+                    
+                # ✅ [추가] 템플릿이 자동 세팅한 직후엔 빠른금액 자동 적용 1회 스킵
+                st.session_state[f"{prefix}_quick_skip_once"] = True
+        
         st.text_input("내역", key=memo_key)
 
         # -------------------------
@@ -2435,6 +2438,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
