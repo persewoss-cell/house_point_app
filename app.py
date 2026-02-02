@@ -1625,10 +1625,19 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
         prev_mode = str(st.session_state.get(mode_prev_key, cur_mode))
         prev_pick = str(st.session_state.get(pick_prev_key, cur_pick))
 
-        # 1) 모드만 바뀐 경우: ✅ 계산 금지 (기준값만 갱신)
+        # 1) 모드만 바뀐 경우:
+        #    ✅ 계산은 하지 않되, "빠른금액 선택"을 0으로 리셋해서
+        #    다음 숫자 클릭이 항상 새로 적용되도록 한다.
         if cur_mode != prev_mode:
             st.session_state[mode_prev_key] = cur_mode
-            st.session_state[pick_prev_key] = cur_pick
+
+            # ✅ 원형 숫자 버튼 선택을 0으로 되돌리기(시각적으로도 0 선택)
+            st.session_state[pick_key] = "0"
+
+            # ✅ prev들도 0으로 맞춰서 다음 클릭이 정상 반영되게
+            st.session_state[pick_prev_key] = "0"
+
+            st.rerun()
 
         # 2) 숫자가 바뀐 경우: ✅ 이때만 계산
         elif cur_pick != prev_pick:
@@ -2389,6 +2398,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
