@@ -1623,21 +1623,21 @@ if st.session_state.admin_ok:
 
         # ✅ radio는 같은 숫자를 다시 눌러도 이벤트가 안 생기므로
         # 한 번 적용 후 선택값을 '0'으로 되돌려 다음 클릭이 다시 동작하게 만듦
-        reset_flag_key = f"{prefix}_quick_reset_flag"
-        st.session_state.setdefault(reset_flag_key, False)
+        # ✅ radio는 같은 값을 다시 눌러도 값이 안 바뀌어서 이벤트가 안 생김
+        # 해결: "마지막 적용 요청"을 별도 키로 저장하고,
+        # pick이 같아도 "mode 변경"이나 "템플릿 적용 직후"에는 다시 적용 가능하게 함
 
-        if st.session_state[reset_flag_key]:
-            # 방금 0으로 되돌린 직후 → 0은 적용하지 않음
-            st.session_state[reset_flag_key] = False
-        else:
-            if st.session_state[prev_key] != pick:
-                st.session_state[prev_key] = pick
-                _apply_amt(int(pick))
+        apply_key = f"{prefix}_quick_apply_sig"
+        st.session_state.setdefault(apply_key, "")
 
-                # 다음에 같은 숫자를 또 눌러도 동작하도록 radio를 0으로 복귀
-                st.session_state[reset_flag_key] = True
-                st.session_state[pick_key] = "0"
-                st.rerun()
+        # 지금 선택(픽) + 현재 모드(금액+/금액-) 를 합쳐서 시그니처로 만든다
+        sig = f"{pick}|{st.session_state.get(mode_key, '금액(+)')}"
+
+        # ✅ pick이 바뀌었거나, mode가 바뀌었으면 무조건 적용
+        if st.session_state.get(apply_key) != sig:
+            st.session_state[apply_key] = sig
+            _apply_amt(int(pick))
+            st.rerun()
 
         c1, c2 = st.columns(2)
         with c1:
@@ -2421,6 +2421,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
