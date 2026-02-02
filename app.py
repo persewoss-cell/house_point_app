@@ -1138,8 +1138,8 @@ defaults = {
     "last_maturity_check": {},
     "tpl_prev": {},
     "delete_confirm": False,
-    "bulk_confirm": False,
-    "bulk_w_confirm": False,
+    "bulk_confirm": False,   # ✅ 통합 일괄 입/출금 확인
+    "bulk_w_confirm": False, # (미사용) 호환 유지
     "undo_mode": False,
     "tpl_sort_mode": False,
     "tpl_work_ids": [],
@@ -1537,7 +1537,7 @@ def template_display_for_trade(t):
     return f"{t['label']}[{kind_kr} {int(t['amount'])}]"
 
 
-# ✅ [버그 수정 핵심] 표시 문자열(셀렉트박스 값) → 템플릿으로 바로 매핑
+# ✅ 표시 문자열(셀렉트박스 값) → 템플릿으로 바로 매핑
 TEMPLATE_BY_DISPLAY = {template_display_for_trade(t): t for t in TEMPLATES}
 
 
@@ -1572,18 +1572,17 @@ if st.session_state.admin_ok:
         st.subheader("⚙️ 설정")
 
         # -------------------------------------------------
-        # 1) ✅ 전체 일괄 지급/벌금
+        # 1) ✅ 전체 일괄 입/출금 (통합)
         # -------------------------------------------------
-        st.markdown("### 🎁 전체 일괄 지급/벌금 (템플릿/빠른 금액)")
+        st.markdown("### 🎁 전체 일괄 입/출금 (템플릿/빠른 금액)")
+        st.caption("※ 출금(벌금)은 잔액 부족이어도 적용되어 통장 잔액이 음수가 될 수 있어요.")
 
         tpl_res3 = api_list_templates_cached()
         templates3 = tpl_res3.get("templates", []) if tpl_res3.get("ok") else []
         tpl_labels3 = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates3]
-
-        # ✅ [버그 수정 핵심] 관리자(설정탭)에서도 표시 문자열로 매핑
         tpl_by_display3 = {template_display_for_trade(t): t for t in templates3}
 
-        def admin_quick_amount_box(prefix: str):
+        def admin_bulk_amount_box(prefix: str):
             memo_key = f"{prefix}_memo"
             dep_key = f"{prefix}_dep"
             wd_key = f"{prefix}_wd"
@@ -1609,85 +1608,62 @@ if st.session_state.admin_ok:
 
             st.text_input("내역(메모)", key=memo_key)
 
-            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)")
+            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)  — 0은 양쪽을 0으로 초기화")
             render_round_amount_buttons(prefix=f"{prefix}_round", dep_key=dep_key, wd_key=wd_key)
 
             c1, c2 = st.columns(2)
             with c1:
-                st.number_input("입금", min_value=0, step=1, key=dep_key)
+                st.number_input("금액(+)", min_value=0, step=1, key=dep_key)
             with c2:
-                st.number_input("출금", min_value=0, step=1, key=wd_key)
+                st.number_input("금액(-)", min_value=0, step=1, key=wd_key)
 
             memo = str(st.session_state.get(memo_key, "") or "").strip()
             dep = int(st.session_state.get(dep_key, 0) or 0)
             wd = int(st.session_state.get(wd_key, 0) or 0)
             return memo, dep, wd
 
-        colA, colB = st.columns(2)
-        with colA:
-            st.markdown("#### ✅ 전체 지급")
-            memoA, depA, wdA = admin_quick_amount_box("admin_bulk_pay")
+        memoBULK, depBULK, wdBULK = admin_bulk_amount_box("admin_bulk")
 
-            if st.button("지급 실행", key="bulk_run_setting", use_container_width=True):
-                st.session_state.bulk_confirm = True
+        if st.button("일괄 실행", key="bulk_run_setting", use_container_width=True):
+            st.session_state.bulk_confirm = True
 
-            if st.session_state.bulk_confirm:
-                st.warning("정말로 전체 학생에게 일괄 지급하시겠습니까?")
-                y, n = st.columns(2)
-                with y:
-                    if st.button("예", key="bulk_yes_setting", use_container_width=True):
-                        if depA <= 0 or wdA > 0:
-                            st.error("지급은 입금(+)만 입력해 주세요.")
-                        elif not memoA:
-                            st.error("내역(메모)을 입력해 주세요.")
-                        else:
-                            res = api_admin_bulk_deposit(admin_pin, depA, memoA)
+        if st.session_state.bulk_confirm:
+            st.warning("정말로 전체 학생에게 일괄 적용하시겠습니까?")
+            y, n = st.columns(2)
+            with y:
+                if st.button("예", key="bulk_yes_setting", use_container_width=True):
+                    if not memoBULK:
+                        st.error("내역(메모)을 입력해 주세요.")
+                    elif (depBULK > 0 and wdBULK > 0) or (depBULK == 0 and wdBULK == 0):
+                        st.error("금액(+) 또는 금액(-) 중 하나만 입력해 주세요.")
+                    else:
+                        if depBULK > 0:
+                            res = api_admin_bulk_deposit(admin_pin, depBULK, memoBULK)
                             if res.get("ok"):
-                                toast(f"일괄 지급 완료! ({res.get('count')}명)", icon="🎉")
+                                toast(f"일괄 입금 완료! ({res.get('count')}명)", icon="🎉")
                                 st.session_state.bulk_confirm = False
                                 api_list_accounts_cached.clear()
                                 st.rerun()
                             else:
-                                st.error(res.get("error", "일괄 지급 실패"))
-                with n:
-                    if st.button("아니오", key="bulk_no_setting", use_container_width=True):
-                        st.session_state.bulk_confirm = False
-                        st.rerun()
-
-        with colB:
-            st.markdown("#### ⚠️ 전체 벌금")
-            memoB, depB, wdB = admin_quick_amount_box("admin_bulk_fine")
-
-            if st.button("벌금 실행", key="bulkw_run_setting", use_container_width=True):
-                st.session_state.bulk_w_confirm = True
-
-            if st.session_state.bulk_w_confirm:
-                st.warning("정말로 전체 학생에게 일괄 벌금을 부과하시겠습니까? (잔액 부족이어도 적용되어 음수 가능)")
-                y, n = st.columns(2)
-                with y:
-                    if st.button("예", key="bulk_w_yes_setting", use_container_width=True):
-                        if wdB <= 0 or depB > 0:
-                            st.error("벌금은 출금(-)만 입력해 주세요.")
-                        elif not memoB:
-                            st.error("내역(메모)을 입력해 주세요.")
+                                st.error(res.get("error", "일괄 입금 실패"))
                         else:
-                            res = api_admin_bulk_withdraw(admin_pin, wdB, memoB)
+                            res = api_admin_bulk_withdraw(admin_pin, wdBULK, memoBULK)
                             if res.get("ok"):
-                                toast(f"벌금 완료! (적용 {res.get('count')}명)", icon="⚠️")
-                                st.session_state.bulk_w_confirm = False
+                                toast(f"일괄 출금 완료! (적용 {res.get('count')}명)", icon="⚠️")
+                                st.session_state.bulk_confirm = False
                                 api_list_accounts_cached.clear()
                                 st.rerun()
                             else:
-                                st.error(res.get("error", "일괄 벌금 실패"))
-                with n:
-                    if st.button("아니오", key="bulk_w_no_setting", use_container_width=True):
-                        st.session_state.bulk_w_confirm = False
-                        st.rerun()
+                                st.error(res.get("error", "일괄 출금 실패"))
+            with n:
+                if st.button("아니오", key="bulk_no_setting", use_container_width=True):
+                    st.session_state.bulk_confirm = False
+                    st.rerun()
 
         st.divider()
 
         # -------------------------------------------------
-        # 2) ✅ (1번) 템플릿 정렬/관리 = "접기/펼치기" (기본 접힘)
+        # 2) ✅ 템플릿 정렬/관리 = "접기/펼치기" (기본 접힘)
         # -------------------------------------------------
         h1, h2 = st.columns([0.35, 9.65], vertical_alignment="center")
         with h1:
@@ -2078,9 +2054,9 @@ if st.session_state.admin_ok:
                 df_tx = df_tx.sort_values("created_at_utc", ascending=False)
                 render_tx_table(df_tx)
 
-            # ✅ (2번) 개별 관리자 입금/출금 (PIN 입력 없이)
+            # ✅ 개별 관리자 입/출금 (PIN 입력 없이) - 동일 시스템
             st.divider()
-            st.markdown("### 🧾 개별 관리자 입금/출금")
+            st.markdown("### 🧾 개별 관리자 입/출금")
 
             memo_key = f"admin_ind_memo_{sid}"
             dep_key = f"admin_ind_dep_{sid}"
@@ -2095,7 +2071,6 @@ if st.session_state.admin_ok:
             tpl_labels_ind = ["(직접 입력)"] + [template_display_for_trade(t) for t in TEMPLATES]
             sel_ind = st.selectbox("내역 템플릿", tpl_labels_ind, key=tpl_key)
 
-            # ✅ [버그 수정 핵심] 여기서도 '표시 문자열'로 바로 매핑
             if sel_ind != "(직접 입력)":
                 tpl = TEMPLATE_BY_DISPLAY.get(sel_ind)
                 if tpl:
@@ -2110,14 +2085,14 @@ if st.session_state.admin_ok:
 
             st.text_input("내역(메모)", key=memo_key)
 
-            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)")
+            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)  — 0은 양쪽을 0으로 초기화")
             render_round_amount_buttons(prefix=f"admin_ind_round_{sid}", dep_key=dep_key, wd_key=wd_key)
 
             c1, c2 = st.columns(2)
             with c1:
-                st.number_input("입금", min_value=0, step=1, key=dep_key)
+                st.number_input("금액(+)", min_value=0, step=1, key=dep_key)
             with c2:
-                st.number_input("출금", min_value=0, step=1, key=wd_key)
+                st.number_input("금액(-)", min_value=0, step=1, key=wd_key)
 
             st.caption("※ 관리자의 출금(벌금)은 잔액 부족이어도 적용되어 통장 잔액이 음수가 될 수 있어요.")
 
@@ -2129,7 +2104,7 @@ if st.session_state.admin_ok:
                 if not memo:
                     st.error("내역(메모)을 입력해 주세요.")
                 elif (dep > 0 and wd > 0) or (dep == 0 and wd == 0):
-                    st.error("입금/출금은 둘 중 하나만 입력해 주세요.")
+                    st.error("금액(+) / 금액(-) 중 하나만 입력해 주세요.")
                 else:
                     res = api_admin_add_tx_by_student_id(ADMIN_PIN, sid, memo, dep, wd)
                     if res.get("ok"):
@@ -2143,7 +2118,7 @@ if st.session_state.admin_ok:
             st.divider()
             render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=bal_now)
 
-            # ✅ (3번) 목표저금 조회
+            # 목표저금 조회
             st.divider()
             render_goal_readonly_admin(student_id=sid, balance_now=bal_now, savings=savings)
 
@@ -2213,7 +2188,6 @@ with sub1:
     if sel != prev:
         st.session_state.tpl_prev[name] = sel
         if sel != "(직접 입력)":
-            # ✅ [버그 수정 핵심] 사용자 거래 탭도 표시 문자열로 매핑
             tpl = TEMPLATE_BY_DISPLAY.get(sel)
             if tpl:
                 st.session_state[memo_key] = tpl["label"]
@@ -2227,14 +2201,14 @@ with sub1:
 
     st.text_input("내역", key=memo_key)
 
-    st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)")
+    st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)  — 0은 양쪽을 0으로 초기화")
     render_round_amount_buttons(prefix=f"user_round_{name}", dep_key=dep_key, wd_key=wd_key)
 
     cA, cB = st.columns(2)
     with cA:
-        st.number_input("입금", min_value=0, step=1, key=dep_key)
+        st.number_input("금액(+)", min_value=0, step=1, key=dep_key)
     with cB:
-        st.number_input("출금", min_value=0, step=1, key=wd_key)
+        st.number_input("금액(-)", min_value=0, step=1, key=wd_key)
 
     col_btn1, col_btn2 = st.columns([1, 1])
     with col_btn1:
@@ -2246,7 +2220,7 @@ with sub1:
             if not memo:
                 st.error("내역을 입력해 주세요.")
             elif (deposit > 0 and withdraw > 0) or (deposit == 0 and withdraw == 0):
-                st.error("입금/출금은 둘 중 하나만 입력해 주세요.")
+                st.error("금액(+) / 금액(-) 중 하나만 입력해 주세요.")
             elif withdraw > 0 and withdraw > balance:
                 st.error("출금 금액이 현재 잔액보다 커요.")
             else:
