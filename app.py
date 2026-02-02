@@ -1738,59 +1738,99 @@ if st.session_state.admin_ok:
             template_by_display=tpl_by_display3,
         )
 
+        # ✅ 저장(1개) + 되돌리기(관리자) 로 통일
         b1, b2 = st.columns(2)
-        with b1:
-            if st.button("지급 실행", key="bulk_run_setting", use_container_width=True):
-                st.session_state.bulk_confirm = True
-        with b2:
-            if st.button("벌금 실행", key="bulkw_run_setting", use_container_width=True):
-                st.session_state.bulk_w_confirm = True
 
-        if st.session_state.bulk_confirm:
-            st.warning("정말로 전체 학생에게 일괄 지급하시겠습니까?")
-            y, n = st.columns(2)
-            with y:
-                if st.button("예", key="bulk_yes_setting", use_container_width=True):
-                    if dep_bulk <= 0 or wd_bulk > 0:
-                        st.error("지급은 입금(+)만 입력해 주세요.")
-                    elif not memo_bulk:
-                        st.error("내역(메모)을 입력해 주세요.")
-                    else:
+        with b1:
+            if st.button("저장", key="bulk_save_setting", use_container_width=True):
+
+                if (dep_bulk > 0 and wd_bulk > 0) or (dep_bulk == 0 and wd_bulk == 0):
+                    st.error("입금/출금은 둘 중 하나만 입력해 주세요.")
+                elif not memo_bulk:
+                    st.error("내역(메모)을 입력해 주세요.")
+                else:
+                    # 입금/출금 자동 판별
+                    if dep_bulk > 0:
                         res = api_admin_bulk_deposit(admin_pin, dep_bulk, memo_bulk)
                         if res.get("ok"):
                             toast(f"일괄 지급 완료! ({res.get('count')}명)", icon="🎉")
-                            st.session_state.bulk_confirm = False
                             api_list_accounts_cached.clear()
                             st.rerun()
                         else:
                             st.error(res.get("error", "일괄 지급 실패"))
-            with n:
-                if st.button("아니오", key="bulk_no_setting", use_container_width=True):
-                    st.session_state.bulk_confirm = False
-                    st.rerun()
-
-        if st.session_state.bulk_w_confirm:
-            st.warning("정말로 전체 학생에게 일괄 벌금을 부과하시겠습니까? (잔액 부족이어도 적용되어 음수 가능)")
-            y, n = st.columns(2)
-            with y:
-                if st.button("예", key="bulk_w_yes_setting", use_container_width=True):
-                    if wd_bulk <= 0 or dep_bulk > 0:
-                        st.error("벌금은 출금(-)만 입력해 주세요.")
-                    elif not memo_bulk:
-                        st.error("내역(메모)을 입력해 주세요.")
                     else:
                         res = api_admin_bulk_withdraw(admin_pin, wd_bulk, memo_bulk)
                         if res.get("ok"):
                             toast(f"벌금 완료! (적용 {res.get('count')}명)", icon="⚠️")
-                            st.session_state.bulk_w_confirm = False
                             api_list_accounts_cached.clear()
                             st.rerun()
                         else:
                             st.error(res.get("error", "일괄 벌금 실패"))
-            with n:
-                if st.button("아니오", key="bulk_w_no_setting", use_container_width=True):
-                    st.session_state.bulk_w_confirm = False
-                    st.rerun()
+
+        with b2:
+            if st.button("되돌리기(관리자)", key="bulk_undo_toggle_setting", use_container_width=True):
+                st.session_state["bulk_undo_mode"] = not st.session_state.get("bulk_undo_mode", False)
+
+        # -------------------------
+        # ✅ 설정탭 되돌리기(관리자)
+        # -------------------------
+        if st.session_state.get("bulk_undo_mode", False):
+            st.divider()
+            st.subheader("↩️ 선택 되돌리기(관리자)")
+
+            admin_pin_rb = st.text_input(
+                "관리자 PIN 입력",
+                type="password",
+                key="bulk_undo_admin_pin_setting",
+            ).strip()
+
+            accounts_for_rb = api_list_accounts_cached().get("accounts", [])
+            name_map = {a["name"]: a["student_id"] for a in accounts_for_rb}
+
+            pick_name = st.selectbox(
+                "되돌릴 학생 선택",
+                ["(선택)"] + list(name_map.keys()),
+                key="bulk_undo_pick_name_setting",
+            )
+
+            if pick_name != "(선택)":
+                sid_rb = name_map.get(pick_name, "")
+                txr_rb = api_get_txs_by_student_id(sid_rb, limit=120)
+                df_rb = pd.DataFrame(txr_rb.get("rows", [])) if txr_rb.get("ok") else pd.DataFrame()
+
+                if not df_rb.empty:
+                    view_df = df_rb.head(50).copy()
+
+                    def _can_rollback_row(row):
+                        if str(row.get("type", "")) == "rollback":
+                            return False
+                        if _is_savings_memo(row.get("memo", "")) or str(row.get("type", "")) in ("maturity",):
+                            return False
+                        return True
+
+                    view_df["가능"] = view_df.apply(_can_rollback_row, axis=1)
+
+                    selected_ids = []
+                    for _, r in view_df.iterrows():
+                        tx_id = r["tx_id"]
+                        label = f"{r['created_at_kr']} | {r['memo']} | +{int(r['deposit'])} / -{int(r['withdraw'])}"
+                        ck = st.checkbox(label, key=f"bulk_rb_ck_{sid_rb}_{tx_id}", disabled=(not r["가능"]))
+                        if ck and r["가능"]:
+                            selected_ids.append(tx_id)
+
+                    if st.button("선택 항목 되돌리기", key="bulk_do_rb_setting", use_container_width=True):
+                        if not is_admin_pin(admin_pin_rb):
+                            st.error("관리자 PIN이 틀립니다.")
+                        elif not selected_ids:
+                            st.warning("체크된 항목이 없어요.")
+                        else:
+                            res2 = api_admin_rollback_selected(admin_pin_rb, sid_rb, selected_ids)
+                            if res2.get("ok"):
+                                toast(f"선택 {res2.get('undone')}건 되돌림 완료", icon="↩️")
+                                api_list_accounts_cached.clear()
+                                st.rerun()
+                            else:
+                                st.error(res2.get("error", "되돌리기 실패"))
 
         st.divider()
 
@@ -2434,4 +2474,5 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
