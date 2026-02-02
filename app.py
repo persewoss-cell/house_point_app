@@ -124,14 +124,31 @@ st.markdown(
         align-items: center !important;
         justify-content: center !important;
     }
-    @media (max-width: 768px){
-        .round-btns div[data-testid="stButton"] > button {
-            height: 2.35rem !important;
-            min-height: 2.35rem !important;
-            font-size: 1.00rem !important;
-            padding: 0.0rem 0.6rem !important;
-        }
+/* ✅ 빠른 금액 버튼: 진짜 원형 버튼 */
+.round-btns div[data-testid="stButton"] > button {
+    border-radius: 50% !important;
+    aspect-ratio: 1 / 1 !important;   /* 정사각형 유지 → 원형 */
+    width: 2.6rem !important;
+    height: 2.6rem !important;
+    min-width: 2.6rem !important;
+    min-height: 2.6rem !important;
+    padding: 0 !important;
+    font-size: 0.95rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+@media (max-width: 768px){
+    .round-btns div[data-testid="stButton"] > button {
+        width: 3.1rem !important;
+        height: 3.1rem !important;
+        min-width: 3.1rem !important;
+        min-height: 3.1rem !important;
+        font-size: 1.05rem !important;
     }
+}
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -2369,5 +2386,6 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
