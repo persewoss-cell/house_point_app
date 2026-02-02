@@ -127,6 +127,7 @@ def init_firestore():
         firebase_admin.initialize_app(cred)
     return firestore.client()
 
+
 db = init_firestore()
 
 # =========================
@@ -135,17 +136,21 @@ db = init_firestore()
 def pin_ok(pin: str) -> bool:
     return str(pin or "").isdigit() and len(str(pin or "")) == 4
 
+
 def toast(msg: str, icon: str = "✅"):
     if hasattr(st, "toast"):
         st.toast(msg, icon=icon)
     else:
         st.success(msg)
 
+
 def is_admin_login(name: str, pin: str) -> bool:
     return (str(name or "").strip() == ADMIN_NAME) and (str(pin or "").strip() == ADMIN_PIN)
 
+
 def is_admin_pin(pin: str) -> bool:
     return str(pin or "").strip() == ADMIN_PIN
+
 
 def format_kr_datetime(val) -> str:
     if val is None or val == "":
@@ -168,6 +173,7 @@ def format_kr_datetime(val) -> str:
     hour12 = 12 if hour12 == 0 else hour12
     return f"{dt.year}년 {dt.month:02d}월 {dt.day:02d}일 {ampm} {hour12:02d}시 {dt.minute:02d}분"
 
+
 def _to_utc_datetime(ts):
     if ts is None or ts == "":
         return None
@@ -183,8 +189,10 @@ def _to_utc_datetime(ts):
     except Exception:
         return None
 
+
 def rate_by_weeks(weeks: int) -> float:
     return weeks * 0.05
+
 
 def compute_preview(principal: int, weeks: int):
     r = rate_by_weeks(weeks)
@@ -192,6 +200,7 @@ def compute_preview(principal: int, weeks: int):
     maturity = principal + interest
     maturity_date = (datetime.now(KST) + timedelta(days=weeks * 7)).date()
     return r, interest, maturity, maturity_date
+
 
 def clamp01(x: float) -> float:
     try:
@@ -201,9 +210,11 @@ def clamp01(x: float) -> float:
     except Exception:
         return 0.0
 
+
 def _is_savings_memo(memo: str) -> bool:
     memo = str(memo or "")
     return ("적금 가입" in memo) or ("적금 해지" in memo) or ("적금 만기" in memo)
+
 
 def render_asset_summary(balance_now: int, savings_list: list[dict]):
     sv_total = sum(
@@ -220,12 +231,14 @@ def render_asset_summary(balance_now: int, savings_list: list[dict]):
     with c3:
         st.metric("적금 총액", f"{int(sv_total)}")
 
+
 def savings_active_total(savings_list: list[dict]) -> int:
     return sum(
         int(s.get("principal", 0) or 0)
         for s in savings_list
         if str(s.get("status", "")).lower() == "active"
     )
+
 
 # =========================
 # Firestore helpers
@@ -244,6 +257,7 @@ def fs_get_student_doc_by_name(name: str):
     docs = list(q)
     return docs[0] if docs else None
 
+
 def fs_auth_student(name: str, pin: str):
     doc = fs_get_student_doc_by_name(name)
     if not doc:
@@ -252,6 +266,7 @@ def fs_auth_student(name: str, pin: str):
     if str(data.get("pin", "")) != str(pin):
         return None
     return doc
+
 
 # =========================
 # Cached lists
@@ -264,11 +279,10 @@ def api_list_accounts_cached():
         s = d.to_dict() or {}
         nm = s.get("name", "")
         if nm:
-            items.append(
-                {"student_id": d.id, "name": nm, "balance": int(s.get("balance", 0) or 0)}
-            )
+            items.append({"student_id": d.id, "name": nm, "balance": int(s.get("balance", 0) or 0)})
     items.sort(key=lambda x: x["name"])
     return {"ok": True, "accounts": items}
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def api_list_templates_cached():
@@ -289,6 +303,7 @@ def api_list_templates_cached():
     templates.sort(key=lambda x: (int(x.get("order", 999999)), str(x.get("label", ""))))
     return {"ok": True, "templates": templates}
 
+
 # =========================
 # Account CRUD
 # =========================
@@ -307,6 +322,7 @@ def api_create_account(name, pin):
     api_list_accounts_cached.clear()
     return {"ok": True}
 
+
 def api_delete_account(name, pin):
     doc = fs_auth_student(name, pin)
     if not doc:
@@ -314,6 +330,7 @@ def api_delete_account(name, pin):
     db.collection("students").document(doc.id).update({"is_active": False})
     api_list_accounts_cached.clear()
     return {"ok": True}
+
 
 # =========================
 # Transactions
@@ -368,6 +385,7 @@ def api_add_tx(name, pin, memo, deposit, withdraw):
         return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"저장 실패: {e}"}
+
 
 def api_admin_add_tx_by_student_id(admin_pin: str, student_id: str, memo: str, deposit: int, withdraw: int):
     """
@@ -424,6 +442,7 @@ def api_admin_add_tx_by_student_id(admin_pin: str, student_id: str, memo: str, d
     except Exception as e:
         return {"ok": False, "error": f"저장 실패: {e}"}
 
+
 def api_get_txs_by_student_id(student_id: str, limit=200):
     if not student_id:
         return {"ok": False, "error": "student_id가 없습니다."}
@@ -454,12 +473,14 @@ def api_get_txs_by_student_id(student_id: str, limit=200):
         )
     return {"ok": True, "rows": rows}
 
+
 def api_get_balance(name, pin):
     student_doc = fs_auth_student(name, pin)
     if not student_doc:
         return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
     data = student_doc.to_dict() or {}
     return {"ok": True, "balance": int(data.get("balance", 0) or 0), "student_id": student_doc.id}
+
 
 # =========================
 # Admin rollback
@@ -474,6 +495,7 @@ def _already_rolled_back(student_id: str, tx_id: str) -> bool:
         .stream()
     )
     return len(list(q)) > 0
+
 
 def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[str]):
     if not is_admin_pin(admin_pin):
@@ -559,6 +581,7 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
 
     return {"ok": True, "undone": undone, "delta": total_delta, "message": info_msg}
 
+
 # =========================
 # Savings
 # =========================
@@ -585,11 +608,13 @@ def api_savings_list_by_student_id(student_id: str):
         )
     return {"ok": True, "savings": out}
 
+
 def api_savings_list(name, pin):
     student_doc = fs_auth_student(name, pin)
     if not student_doc:
         return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
     return api_savings_list_by_student_id(student_doc.id)
+
 
 def api_savings_create(name, pin, principal, weeks):
     principal = int(principal or 0)
@@ -654,6 +679,7 @@ def api_savings_create(name, pin, principal, weeks):
     except Exception as e:
         return {"ok": False, "error": f"적금 가입 실패: {e}"}
 
+
 def api_savings_cancel(name, pin, savings_id):
     student_doc = fs_auth_student(name, pin)
     if not student_doc:
@@ -708,6 +734,7 @@ def api_savings_cancel(name, pin, savings_id):
         return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"해지 실패: {e}"}
+
 
 def api_process_maturities(name, pin):
     student_doc = fs_auth_student(name, pin)
@@ -771,6 +798,7 @@ def api_process_maturities(name, pin):
 
     return {"ok": True, "matured_count": matured_count, "paid_total": paid_total}
 
+
 # =========================
 # Goal
 # =========================
@@ -779,6 +807,7 @@ def api_get_goal(name, pin):
     if not student_doc:
         return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
     return api_get_goal_by_student_id(student_doc.id)
+
 
 def api_get_goal_by_student_id(student_id: str):
     """ ✅ 관리자/사용자 공용 조회: student_id 기준 목표 조회 """
@@ -803,6 +832,7 @@ def api_get_goal_by_student_id(student_id: str):
         "goal_date": str(g.get("goal_date", "") or ""),
     }
 
+
 def api_set_goal(name, pin, goal_amount, goal_date_str):
     goal_amount = int(goal_amount or 0)
     goal_date_str = str(goal_date_str or "").strip()
@@ -822,9 +852,7 @@ def api_set_goal(name, pin, goal_amount, goal_date_str):
     )
     docs = list(q)
     if docs:
-        db.collection("goals").document(docs[0].id).update(
-            {"target_amount": goal_amount, "goal_date": goal_date_str}
-        )
+        db.collection("goals").document(docs[0].id).update({"target_amount": goal_amount, "goal_date": goal_date_str})
     else:
         db.collection("goals").document().set(
             {
@@ -836,6 +864,7 @@ def api_set_goal(name, pin, goal_amount, goal_date_str):
             }
         )
     return {"ok": True}
+
 
 # =========================
 # Admin functions
@@ -850,6 +879,7 @@ def api_admin_reset_pin(admin_pin, name, new_pin):
         return {"ok": False, "error": "계정을 찾지 못했습니다."}
     db.collection("students").document(doc.id).update({"pin": str(new_pin)})
     return {"ok": True}
+
 
 def api_admin_bulk_deposit(admin_pin, amount, memo):
     if not is_admin_pin(admin_pin):
@@ -887,6 +917,7 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
         _do(db.transaction())
         count += 1
     return {"ok": True, "count": count}
+
 
 def api_admin_bulk_withdraw(admin_pin, amount, memo):
     # ✅ 잔액 부족이어도 적용(음수 허용)
@@ -926,6 +957,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
         count += 1
     return {"ok": True, "count": count}
 
+
 def api_admin_upsert_template(admin_pin, template_id, label, kind, amount, order):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -951,6 +983,7 @@ def api_admin_upsert_template(admin_pin, template_id, label, kind, amount, order
     api_list_templates_cached.clear()
     return {"ok": True}
 
+
 def api_admin_delete_template(admin_pin, template_id):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -960,6 +993,7 @@ def api_admin_delete_template(admin_pin, template_id):
     db.collection("templates").document(template_id).delete()
     api_list_templates_cached.clear()
     return {"ok": True}
+
 
 def api_admin_backfill_template_order(admin_pin: str):
     if not is_admin_pin(admin_pin):
@@ -981,6 +1015,7 @@ def api_admin_backfill_template_order(admin_pin: str):
 
     api_list_templates_cached.clear()
     return {"ok": True, "count": len(items)}
+
 
 def api_admin_normalize_template_order(admin_pin: str):
     if not is_admin_pin(admin_pin):
@@ -1008,6 +1043,7 @@ def api_admin_normalize_template_order(admin_pin: str):
     api_list_templates_cached.clear()
     return {"ok": True, "count": len(items)}
 
+
 def api_admin_save_template_orders(admin_pin: str, ordered_template_ids: list[str]):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -1024,6 +1060,7 @@ def api_admin_save_template_orders(admin_pin: str, ordered_template_ids: list[st
         return {"ok": True, "count": len(ordered_template_ids)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
 
 # =========================
 # Session init
@@ -1049,6 +1086,7 @@ defaults = {
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
 
 # =========================
 # UI helpers
@@ -1092,6 +1130,7 @@ def refresh_account_data(name: str, pin: str, force: bool = False):
         "ts": now,
     }
 
+
 def maybe_check_maturities(name: str, pin: str):
     now = datetime.now(KST)
     last = st.session_state.last_maturity_check.get(name)
@@ -1099,6 +1138,7 @@ def maybe_check_maturities(name: str, pin: str):
         return None
     st.session_state.last_maturity_check[name] = now
     return api_process_maturities(name, pin)
+
 
 def render_tx_table(df_tx: pd.DataFrame):
     if df_tx is None or df_tx.empty:
@@ -1119,6 +1159,7 @@ def render_tx_table(df_tx: pd.DataFrame):
         hide_index=True,
     )
 
+
 def render_active_savings_list(savings: list[dict], name: str, pin: str, balance_now: int):
     active = [s for s in savings if str(s.get("status", "")).lower() == "active"]
     matured = [s for s in savings if str(s.get("status", "")).lower() == "matured"]
@@ -1135,9 +1176,7 @@ def render_active_savings_list(savings: list[dict], name: str, pin: str, balance
             interest2 = int(s["interest"])
             mdt = s.get("maturity_date")
             mkr = format_kr_datetime(mdt.astimezone(KST)) if isinstance(mdt, datetime) else ""
-            st.write(
-                f"- 원금 **{principal}**, 기간 **{weeks}주**, 만기일 **{mkr}**, 만기 이자 **{interest2}**"
-            )
+            st.write(f"- 원금 **{principal}**, 기간 **{weeks}주**, 만기일 **{mkr}**, 만기 이자 **{interest2}**")
 
             if st.button("해지", key=f"sv_cancel_btn_{name}_{sid}", use_container_width=True):
                 st.session_state[f"sv_cancel_confirm_{sid}"] = True
@@ -1169,6 +1208,7 @@ def render_active_savings_list(savings: list[dict], name: str, pin: str, balance
         st.markdown("### ⚪ 해지 기록")
         for s in canceled[:10]:
             st.write(f"- 원금 {int(s['principal'])}, {int(s['weeks'])}주")
+
 
 def render_goal_section(name: str, pin: str, balance: int, savings_list: list[dict]):
     st.markdown("### 🎯 목표 저금(목표 설정/달성률)")
@@ -1236,6 +1276,7 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
     else:
         st.caption("목표 날짜 이전 만기 적금이 없어 예상 금액은 현재 잔액과 같아요.")
 
+
 def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[dict]):
     """ ✅ (3번) 관리자 개별 탭: 목표 '조회'만 가능(수정/설정 UI 없음) """
     st.markdown("### 🎯 목표저금(조회)")
@@ -1287,6 +1328,7 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
 
     if goal_date and bonus > 0:
         st.caption(f"※ 목표일({goal_date.isoformat()}) 전 만기 적금 수령액(원금+이자) +{bonus} 포함")
+
 
 # =========================
 # Sidebar: 계정 만들기/삭제
@@ -1342,6 +1384,7 @@ with st.sidebar:
             if st.button("아니오", key="delete_no"):
                 st.session_state.delete_confirm = False
                 st.rerun()
+
 
 # =========================
 # Main: 로그인 (이름 저장 체크)
@@ -1413,18 +1456,22 @@ else:
 if not st.session_state.logged_in:
     st.stop()
 
+
 # =========================
 # Templates (공용)
 # =========================
 tpl_res = api_list_templates_cached()
 TEMPLATES = tpl_res.get("templates", []) if tpl_res.get("ok") else []
 
+
 def template_display_for_trade(t):
     kind_kr = "입금" if t["kind"] == "deposit" else "출금"
     return f"{t['label']}[{kind_kr} {int(t['amount'])}]"
 
+
 # ✅ [버그 수정 핵심] 표시 문자열(셀렉트박스 값) → 템플릿으로 바로 매핑
 TEMPLATE_BY_DISPLAY = {template_display_for_trade(t): t for t in TEMPLATES}
+
 
 # =========================
 # 관리자 화면
@@ -2043,12 +2090,24 @@ if st.session_state.admin_ok:
             QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
             st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
 
-            def _apply_individual_quick():
-                amt = int(st.session_state.get(quick_key, 0) or 0)
+            # =========================
+            # ✅ [수정된 부분] 금액 선택을 radio → 버튼으로 변경
+            # - radio는 같은 값을 다시 클릭해도 on_change가 안 떠서 "누를 때마다 누적"이 불가
+            # - 버튼은 매 클릭마다 누적 가능
+            # =========================
+            st.caption("⚡ 금액 선택(클릭할 때마다 누적)")
+
+            def _apply_individual_amount(amt: int):
+                amt = int(amt or 0)
                 if amt == 0:
                     st.session_state[dep_key] = 0
                     st.session_state[wd_key] = 0
+                    st.session_state[quick_key] = 0
                     return
+
+                # 표시용(선택값 저장)만 업데이트
+                st.session_state[quick_key] = amt
+
                 if st.session_state[mode_key] == "입금(+)":
                     st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
                     st.session_state[wd_key] = 0
@@ -2056,19 +2115,12 @@ if st.session_state.admin_ok:
                     st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
                     st.session_state[dep_key] = 0
 
-            def _fmt_amt_ind(x):
-                if x == 0:
-                    return "0"
-                return f"-{x}" if st.session_state[mode_key] == "출금(-)" else f"{x}"
-
-            st.radio(
-                "금액 선택",
-                QUICK_AMOUNTS,
-                horizontal=True,
-                key=quick_key,
-                format_func=_fmt_amt_ind,
-                on_change=_apply_individual_quick,
-            )
+            btn_cols = st.columns(len(QUICK_AMOUNTS))
+            for j, amt in enumerate(QUICK_AMOUNTS):
+                label = "0" if amt == 0 else (f"-{amt}" if st.session_state[mode_key] == "출금(-)" else f"{amt}")
+                if btn_cols[j].button(label, key=f"{quick_key}_btn_{amt}", use_container_width=True):
+                    _apply_individual_amount(amt)
+                    st.rerun()
 
             c1, c2 = st.columns(2)
             with c1:
@@ -2106,6 +2158,7 @@ if st.session_state.admin_ok:
 
     st.stop()
 
+
 # =========================
 # 사용자 화면
 # =========================
@@ -2127,11 +2180,7 @@ balance = int(slot["balance"])
 student_id = slot.get("student_id")
 savings_list = slot.get("savings", []) or []
 
-sv_total = sum(
-    int(s.get("principal", 0) or 0)
-    for s in savings_list
-    if str(s.get("status", "")).lower() == "active"
-)
+sv_total = sum(int(s.get("principal", 0) or 0) for s in savings_list if str(s.get("status", "")).lower() == "active")
 asset_total = balance + sv_total
 
 st.markdown(f"## 🧾 {name} 통장")
