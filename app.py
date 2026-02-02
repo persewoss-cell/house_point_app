@@ -2221,62 +2221,60 @@ with sub1:
     st.text_input("내역", key=memo_key)
 
     st.caption("⚡ 빠른 금액(원형 버튼)")
-    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
+
     mode_key = f"quick_mode_{name}"
-    if mode_key not in st.session_state:
-        st.session_state[mode_key] = "입금(+)"
+    prev_key = f"quick_prev_{name}"
+    st.session_state.setdefault(mode_key, "금액(+)")
+    st.session_state.setdefault(prev_key, None)
 
-    st.radio("적용", ["입금(+)", "출금(-)"], horizontal=True, key=mode_key)
+    def _get_net_user() -> int:
+        dep = int(st.session_state.get(dep_key, 0) or 0)
+        wd = int(st.session_state.get(wd_key, 0) or 0)
+        return dep - wd
 
-    quick_key = f"quick_amt_{name}"
-    st.session_state.setdefault(quick_key, 0)
+    def _set_by_net_user(net: int):
+        net = int(net or 0)
+        if net >= 0:
+            st.session_state[dep_key] = net
+            st.session_state[wd_key] = 0
+        else:
+            st.session_state[dep_key] = 0
+            st.session_state[wd_key] = -net
 
-    def _apply_user_amount(amt: int):
+    def _apply_amt_user(amt: int):
         amt = int(amt or 0)
+
+        # ✅ 0은 초기화
         if amt == 0:
             st.session_state[dep_key] = 0
             st.session_state[wd_key] = 0
-            st.session_state[quick_key] = 0
             return
 
-        st.session_state[quick_key] = amt
+        sign = 1 if st.session_state[mode_key] == "금액(+)" else -1
+        net = _get_net_user() + (sign * amt)
+        _set_by_net_user(net)
 
-        if st.session_state[mode_key] == "입금(+)":
-            st.session_state[dep_key] = int(st.session_state.get(dep_key, 0) or 0) + amt
-            st.session_state[wd_key] = 0
-        else:
-            st.session_state[wd_key] = int(st.session_state.get(wd_key, 0) or 0) + amt
-            st.session_state[dep_key] = 0
+    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
 
-        st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+    st.radio("적용", ["금액(+)", "금액(-)"], horizontal=True, key=mode_key)
 
-        opts = [str(a) for a in QUICK_AMOUNTS]
-        pick_key = f"{prefix}_quick_pick"
-        prev_key = f"{prefix}_quick_pick_prev"
+    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
 
-        if prev_key not in st.session_state:
-            st.session_state[prev_key] = None
+    opts = [str(a) for a in QUICK_AMOUNTS]
+    pick_key = f"quick_pick_{name}"
+    pick = st.radio(
+        "빠른금액",
+        opts,
+        horizontal=True,
+        label_visibility="collapsed",
+        key=pick_key,
+    )
 
-        pick = st.radio(
-            "빠른금액",
-            opts,
-            horizontal=True,
-            label_visibility="collapsed",
-            key=pick_key,
-        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # 선택값이 바뀌었을 때만 적용 + rerun (무한 rerun 방지)
-        if st.session_state[prev_key] != pick:
-            st.session_state[prev_key] = pick
-            _apply_amt(int(pick))
-            st.rerun()
-
-    if st.button("금액 초기화", key=f"quick_reset_{name}", use_container_width=True):
-        st.session_state[dep_key] = 0
-        st.session_state[wd_key] = 0
-        st.session_state[quick_key] = 0
+    if st.session_state[prev_key] != pick:
+        st.session_state[prev_key] = pick
+        _apply_amt_user(int(pick))
         st.rerun()
 
     cA, cB = st.columns(2)
@@ -2411,6 +2409,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
