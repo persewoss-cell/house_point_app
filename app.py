@@ -1580,26 +1580,37 @@ if st.session_state.admin_ok:
             _set_by_net(net)
 
         # -------------------------
-        # 템플릿
+        # 템플릿  ✅(관리자탭 반영 버그 수정: prev 추적 + 변경시에만 rerun)
         # -------------------------
+        tpl_prev_key = f"{prefix}_tpl_prev"
+        st.session_state.setdefault(tpl_prev_key, "(직접 입력)")
+
         tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
         sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
 
-        if sel != "(직접 입력)":
-            tpl = template_by_display.get(sel)
-            if tpl:
-                st.session_state[memo_key] = tpl["label"]
-                amt = int(tpl["amount"])
-                if tpl["kind"] == "deposit":
-                    _set_by_net(amt)
-                    st.session_state[mode_key] = "금액(+)"
-                else:
-                    _set_by_net(-amt)
-                    st.session_state[mode_key] = "금액(-)"
-                    
-                # ✅ [추가] 템플릿이 자동 세팅한 직후엔 빠른금액 자동 적용 1회 스킵
-                st.session_state[f"{prefix}_quick_skip_once"] = True
-        
+        # ✅ 선택이 바뀌는 "순간"에만 내역/금액을 세팅하고 rerun
+        if sel != st.session_state.get(tpl_prev_key):
+            st.session_state[tpl_prev_key] = sel
+
+            if sel != "(직접 입력)":
+                tpl = template_by_display.get(sel)
+                if tpl:
+                    st.session_state[memo_key] = tpl["label"]
+                    amt = int(tpl["amount"])
+
+                    if tpl["kind"] == "deposit":
+                        _set_by_net(amt)
+                        st.session_state[mode_key] = "금액(+)"
+                    else:
+                        _set_by_net(-amt)
+                        st.session_state[mode_key] = "금액(-)"
+
+                    # ✅ 템플릿이 금액/모드를 자동으로 바꾼 직후 1회는 빠른금액 자동적용 스킵
+                    st.session_state[f"{prefix}_quick_skip_once"] = True
+
+            # ✅ 관리자 탭에서 템플릿 선택 즉시 화면에 반영되도록 강제 rerun
+            st.rerun()
+
         st.text_input("내역", key=memo_key)
 
         # -------------------------
@@ -2438,6 +2449,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
