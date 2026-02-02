@@ -280,28 +280,49 @@ def apply_signed_delta(dep_key: str, wd_key: str, delta: int):
 
 
 def render_round_amount_buttons(prefix: str, dep_key: str, wd_key: str):
+    # ✅ 모바일에서 "칸을 덜 차지"하도록: 원형 버튼 크기만 쓰고, 2줄로 배치
     pos_row = [0, 10, 20, 50, 100, 200, 500, 1000]
     neg_row = [-10, -20, -50, -100, -200, -500, -1000]
 
     st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
 
-    # 1줄: 양수(및 0)
     cols1 = st.columns(len(pos_row))
     for i, amt in enumerate(pos_row):
         label = "0" if amt == 0 else f"{amt}"
-        if cols1[i].button(label, key=f"{prefix}_amtbtn_pos_{amt}", use_container_width=True):
+        if cols1[i].button(label, key=f"{prefix}_pos_{amt}", use_container_width=True):
             apply_signed_delta(dep_key, wd_key, amt)
             st.rerun()
 
-    # 2줄: 음수
     cols2 = st.columns(len(neg_row))
     for i, amt in enumerate(neg_row):
-        label = f"{amt}"
-        if cols2[i].button(label, key=f"{prefix}_amtbtn_neg_{amt}", use_container_width=True):
+        if cols2[i].button(f"{amt}", key=f"{prefix}_neg_{amt}", use_container_width=True):
             apply_signed_delta(dep_key, wd_key, amt)
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_compact_round_ui(prefix: str, dep_key: str, wd_key: str):
+    """
+    ✅ 최종 공용 입력 UI (모바일 공간 최소화)
+    - 금액(+) / 금액(-) number_input 2칸 삭제
+    - 원형 빠른 버튼(2줄)만으로 입력
+    - 현재 선택 결과를 작은 글로 요약 표시
+    """
+    st.caption("⚡ 빠른 금액(원형 버튼) — 0은 양쪽 0으로 초기화 / +와 -를 번갈아 누르면 자동 계산")
+
+    render_round_amount_buttons(prefix=f"{prefix}_round", dep_key=dep_key, wd_key=wd_key)
+
+    dep = int(st.session_state.get(dep_key, 0) or 0)
+    wd = int(st.session_state.get(wd_key, 0) or 0)
+
+    # ✅ 공간 덜 먹는 요약(두번째 캡쳐 느낌)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**입금(+):** {dep}")
+    with c2:
+        st.markdown(f"**출금(-):** {wd}")
+
 
 
 # =========================
@@ -1608,14 +1629,7 @@ if st.session_state.admin_ok:
 
             st.text_input("내역(메모)", key=memo_key)
 
-            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)  — 0은 양쪽을 0으로 초기화")
-            render_round_amount_buttons(prefix=f"{prefix}_round", dep_key=dep_key, wd_key=wd_key)
-
-            c1, c2 = st.columns(2)
-            with c1:
-                st.number_input("금액(+)", min_value=0, step=1, key=dep_key)
-            with c2:
-                st.number_input("금액(-)", min_value=0, step=1, key=wd_key)
+            render_compact_round_ui(prefix=prefix, dep_key=dep_key, wd_key=wd_key)
 
             memo = str(st.session_state.get(memo_key, "") or "").strip()
             dep = int(st.session_state.get(dep_key, 0) or 0)
@@ -2085,14 +2099,7 @@ if st.session_state.admin_ok:
 
             st.text_input("내역(메모)", key=memo_key)
 
-            st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)  — 0은 양쪽을 0으로 초기화")
-            render_round_amount_buttons(prefix=f"admin_ind_round_{sid}", dep_key=dep_key, wd_key=wd_key)
-
-            c1, c2 = st.columns(2)
-            with c1:
-                st.number_input("금액(+)", min_value=0, step=1, key=dep_key)
-            with c2:
-                st.number_input("금액(-)", min_value=0, step=1, key=wd_key)
+            render_compact_round_ui(prefix=f"admin_ind_{sid}", dep_key=dep_key, wd_key=wd_key)
 
             st.caption("※ 관리자의 출금(벌금)은 잔액 부족이어도 적용되어 통장 잔액이 음수가 될 수 있어요.")
 
@@ -2201,14 +2208,7 @@ with sub1:
 
     st.text_input("내역", key=memo_key)
 
-    st.caption("⚡ 빠른 금액(원형 버튼, 계산기 방식)  — 0은 양쪽을 0으로 초기화")
-    render_round_amount_buttons(prefix=f"user_round_{name}", dep_key=dep_key, wd_key=wd_key)
-
-    cA, cB = st.columns(2)
-    with cA:
-        st.number_input("금액(+)", min_value=0, step=1, key=dep_key)
-    with cB:
-        st.number_input("금액(-)", min_value=0, step=1, key=wd_key)
+    render_compact_round_ui(prefix=f"user_{name}", dep_key=dep_key, wd_key=wd_key)
 
     col_btn1, col_btn2 = st.columns([1, 1])
     with col_btn1:
@@ -2336,3 +2336,4 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
