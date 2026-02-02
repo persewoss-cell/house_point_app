@@ -1621,11 +1621,16 @@ if st.session_state.admin_ok:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ✅ radio는 같은 숫자를 다시 눌러도 이벤트가 안 생기므로
-        # 한 번 적용 후 선택값을 '0'으로 되돌려 다음 클릭이 다시 동작하게 만듦
-        # ✅ radio는 같은 값을 다시 눌러도 값이 안 바뀌어서 이벤트가 안 생김
-        # 해결: "마지막 적용 요청"을 별도 키로 저장하고,
-        # pick이 같아도 "mode 변경"이나 "템플릿 적용 직후"에는 다시 적용 가능하게 함
+        # ✅ 템플릿이 mode/금액을 "자동"으로 바꾸는 순간에는
+        # 빠른금액 자동 적용이 꼬일 수 있어서 1회 스킵 플래그를 둔다.
+        skip_key = f"{prefix}_quick_skip_once"
+        st.session_state.setdefault(skip_key, False)
+
+        # -------------------------
+        # 템플릿 적용 시: 스킵 플래그 ON
+        # -------------------------
+        # (위에서 템플릿을 적용하는 코드 바로 아래에 이 줄을 추가해야 함)
+        # -> 아래 "템플릿 적용 코드" 패치 2를 참고
 
         apply_key = f"{prefix}_quick_apply_sig"
         st.session_state.setdefault(apply_key, "")
@@ -1633,11 +1638,20 @@ if st.session_state.admin_ok:
         # 지금 선택(픽) + 현재 모드(금액+/금액-) 를 합쳐서 시그니처로 만든다
         sig = f"{pick}|{st.session_state.get(mode_key, '금액(+)')}"
 
-        # ✅ pick이 바뀌었거나, mode가 바뀌었으면 무조건 적용
-        if st.session_state.get(apply_key) != sig:
+        # ✅ 템플릿 자동 세팅 직후에는 적용하지 않고, 기준값만 맞춰준다(1회)
+        if st.session_state.get(skip_key, False):
             st.session_state[apply_key] = sig
-            _apply_amt(int(pick))
-            st.rerun()
+            st.session_state[skip_key] = False
+
+        else:
+            # ✅ 최초 1회는 "자동 적용"하지 않고 기준만 세팅 (처음 로딩 때 0 적용 방지)
+            if st.session_state.get(apply_key, "") == "":
+                st.session_state[apply_key] = sig
+            elif st.session_state.get(apply_key) != sig:
+                st.session_state[apply_key] = sig
+                _apply_amt(int(pick))
+                st.rerun()
+
 
         c1, c2 = st.columns(2)
         with c1:
@@ -2421,6 +2435,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
