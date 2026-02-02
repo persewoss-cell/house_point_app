@@ -1418,11 +1418,13 @@ if not st.session_state.logged_in:
 # =========================
 tpl_res = api_list_templates_cached()
 TEMPLATES = tpl_res.get("templates", []) if tpl_res.get("ok") else []
-TEMPLATE_BY_LABEL = {t["label"]: t for t in TEMPLATES}
 
 def template_display_for_trade(t):
     kind_kr = "입금" if t["kind"] == "deposit" else "출금"
     return f"{t['label']}[{kind_kr} {int(t['amount'])}]"
+
+# ✅ [버그 수정 핵심] 표시 문자열(셀렉트박스 값) → 템플릿으로 바로 매핑
+TEMPLATE_BY_DISPLAY = {template_display_for_trade(t): t for t in TEMPLATES}
 
 # =========================
 # 관리자 화면
@@ -1462,7 +1464,9 @@ if st.session_state.admin_ok:
         tpl_res3 = api_list_templates_cached()
         templates3 = tpl_res3.get("templates", []) if tpl_res3.get("ok") else []
         tpl_labels3 = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates3]
-        tpl_by_label3 = {t["label"]: t for t in templates3}
+
+        # ✅ [버그 수정 핵심] 관리자(설정탭)에서도 표시 문자열로 매핑
+        tpl_by_display3 = {template_display_for_trade(t): t for t in templates3}
 
         def admin_quick_amount_box(prefix: str):
             memo_key = f"{prefix}_memo"
@@ -1481,8 +1485,7 @@ if st.session_state.admin_ok:
 
             sel = st.selectbox("내역 템플릿", tpl_labels3, key=tpl_key)
             if sel != "(직접 입력)":
-                base_label = sel.split("[")[0]
-                tpl = tpl_by_label3.get(base_label)
+                tpl = tpl_by_display3.get(sel)
                 if tpl:
                     st.session_state[memo_key] = tpl["label"]
                     amt = int(tpl["amount"])
@@ -2019,9 +2022,10 @@ if st.session_state.admin_ok:
 
             tpl_labels_ind = ["(직접 입력)"] + [template_display_for_trade(t) for t in TEMPLATES]
             sel_ind = st.selectbox("내역 템플릿", tpl_labels_ind, key=tpl_key)
+
+            # ✅ [버그 수정 핵심] 여기서도 '표시 문자열'로 바로 매핑
             if sel_ind != "(직접 입력)":
-                base_label = sel_ind.split("[")[0]
-                tpl = TEMPLATE_BY_LABEL.get(base_label)
+                tpl = TEMPLATE_BY_DISPLAY.get(sel_ind)
                 if tpl:
                     st.session_state[memo_key] = tpl["label"]
                     amt = int(tpl["amount"])
@@ -2169,8 +2173,8 @@ with sub1:
     if sel != prev:
         st.session_state.tpl_prev[name] = sel
         if sel != "(직접 입력)":
-            base_label = sel.split("[")[0]
-            tpl = TEMPLATE_BY_LABEL.get(base_label)
+            # ✅ [버그 수정 핵심] 사용자 거래 탭도 표시 문자열로 매핑
+            tpl = TEMPLATE_BY_DISPLAY.get(sel)
             if tpl:
                 st.session_state[memo_key] = tpl["label"]
                 amt = int(tpl["amount"])
