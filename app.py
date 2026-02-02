@@ -110,23 +110,26 @@ st.markdown(
     .tpl-simple .lab { font-weight: 800; }
     .tpl-simple .meta { color:#666; font-size: 0.92rem; margin-top: 2px; }
 
-    /* ✅ (추가) 빠른 금액 "원형 버튼" 전용 */
+    /* ✅ (교체) 빠른 금액 버튼: 입금/출금처럼 '알약(둥근) 버튼' + 클릭형 */
     .round-btns div[data-testid="stButton"] > button {
-        border-radius: 9999px !important;
-        width: 2.35rem !important;
-        min-width: 2.35rem !important;
-        height: 2.35rem !important;
-        min-height: 2.35rem !important;
-        padding: 0 !important;
-        font-size: 0.90rem !important;
+        border-radius: 9999px !important;     /* 알약 모양 */
+        width: 100% !important;               /* 칸을 꽉 채우는 버튼 */
+        min-width: 0 !important;
+        height: 2.15rem !important;
+        min-height: 2.15rem !important;
+        padding: 0.0rem 0.55rem !important;
+        font-size: 0.95rem !important;
+        line-height: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     @media (max-width: 768px){
         .round-btns div[data-testid="stButton"] > button {
-            width: 2.65rem !important;
-            min-width: 2.65rem !important;
-            height: 2.65rem !important;
-            min-height: 2.65rem !important;
-            font-size: 0.95rem !important;
+            height: 2.35rem !important;
+            min-height: 2.35rem !important;
+            font-size: 1.00rem !important;
+            padding: 0.0rem 0.6rem !important;
         }
     }
     </style>
@@ -2366,4 +2369,5 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
