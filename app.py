@@ -1511,12 +1511,19 @@ TEMPLATE_BY_DISPLAY = {template_display_for_trade(t): t for t in TEMPLATES}
 # - 원형 버튼 + 템플릿 반영 + 금액(+) / 금액(-) + 계산기 방식(net)
 # =========================
 def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display: dict):
+    """
+    ✅ 공용: 거래 입력 UI
+    - Streamlit에 st.fragment가 있으면 "빠른금액 UI"만 부분 rerun → 버튼 반응 즉시(설정탭처럼)
+    - st.fragment가 없으면 기존 방식(전체 rerun)으로 동작
+    """
     memo_key = f"{prefix}_memo"
     dep_key = f"{prefix}_dep"
     wd_key = f"{prefix}_wd"
     tpl_key = f"{prefix}_tpl"
     mode_key = f"{prefix}_mode"
     prev_key = f"{prefix}_quick_prev"
+
+    out_key = f"{prefix}_trade_out"
 
     st.session_state.setdefault(memo_key, "")
     st.session_state.setdefault(dep_key, 0)
@@ -1551,118 +1558,138 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
         _set_by_net(net)
 
     # -------------------------
-    # 템플릿 (선택이 바뀔 때만 1회 세팅 + rerun)
+    # st.fragment 사용 가능 여부
     # -------------------------
-    tpl_prev_key = f"{prefix}_tpl_prev"
-    st.session_state.setdefault(tpl_prev_key, "(직접 입력)")
-
-    tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
-    sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
-
-    if sel != st.session_state.get(tpl_prev_key):
-        st.session_state[tpl_prev_key] = sel
-
-        if sel != "(직접 입력)":
-            tpl = template_by_display.get(sel)
-            if tpl:
-                st.session_state[memo_key] = tpl["label"]
-                amt = int(tpl["amount"])
-
-                if tpl["kind"] == "deposit":
-                    _set_by_net(amt)
-                    st.session_state[mode_key] = "금액(+)"
-                else:
-                    _set_by_net(-amt)
-                    st.session_state[mode_key] = "금액(-)"
-
-                st.session_state[f"{prefix}_quick_skip_once"] = True
-
-        st.rerun()
-
-    st.text_input("내역", key=memo_key)
+    _frag = getattr(st, "fragment", None)
+    use_fragment = callable(_frag)
 
     # -------------------------
-    # 빠른 금액(원형 버튼) + 모드(금액+/금액-)
+    # 실제 UI 그리는 부분 (fragment 안에서만 부분 rerun 되도록)
     # -------------------------
-    st.caption("⚡ 빠른 금액(원형 버튼)")
-    QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
+    def _draw_ui():
+        # 템플릿 (선택이 바뀔 때만 1회 세팅)
+        tpl_prev_key = f"{prefix}_tpl_prev"
+        st.session_state.setdefault(tpl_prev_key, "(직접 입력)")
 
-    # ✅ 빠른금액 라디오 key (고정)
-    pick_key = f"{prefix}_quick_pick"
-    st.session_state.setdefault(pick_key, "0")
+        tpl_labels = ["(직접 입력)"] + [template_display_for_trade(t) for t in templates_list]
+        sel = st.selectbox("내역 템플릿", tpl_labels, key=tpl_key)
 
-    # ✅ 템플릿 자동세팅 직후 1회 스킵 + 모드 변경 직후 1회 스킵(같이 씀)
-    skip_key = f"{prefix}_quick_skip_once"
-    st.session_state.setdefault(skip_key, False)
+        if sel != st.session_state.get(tpl_prev_key):
+            st.session_state[tpl_prev_key] = sel
 
-    # ✅ 모드 변경 시: "빠른금액 선택만 0으로 리셋" + "이번 1회 계산 스킵"
-    def _on_mode_change():
-        st.session_state[pick_key] = "0"          # ✅ 원형 숫자 선택만 0으로
-        st.session_state[skip_key] = True         # ✅ 다음 run에서 계산 스킵
+            if sel != "(직접 입력)":
+                tpl = template_by_display.get(sel)
+                if tpl:
+                    st.session_state[memo_key] = tpl["label"]
+                    amt = int(tpl["amount"])
 
-        # prev 값도 0으로 맞춰서, 다음 숫자 클릭이 정상 반영되게
-        st.session_state[f"{prefix}_quick_pick_prev"] = "0"
-        st.session_state[f"{prefix}_quick_mode_prev"] = str(st.session_state.get(mode_key, "금액(+)"))
+                    if tpl["kind"] == "deposit":
+                        _set_by_net(amt)
+                        st.session_state[mode_key] = "금액(+)"
+                    else:
+                        _set_by_net(-amt)
+                        st.session_state[mode_key] = "금액(-)"
 
-    st.radio(
-        "적용",
-        ["금액(+)", "금액(-)"],
-        horizontal=True,
-        key=mode_key,
-        on_change=_on_mode_change,
-    )
+                    st.session_state[f"{prefix}_quick_skip_once"] = True
 
-    st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
-    opts = [str(a) for a in QUICK_AMOUNTS]
-    pick = st.radio(
-        "빠른금액",
-        opts,
-        horizontal=True,
-        label_visibility="collapsed",
-        key=pick_key,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+            # ✅ fragment 모드에서는 st.rerun() 금지 (전체 rerun 방지)
+            if not use_fragment:
+                st.rerun()
 
-    # ✅ (패치) 모드 변경으로 인한 "0 리셋"은 계산하지 않음
-    mode_prev_key = f"{prefix}_quick_mode_prev"
-    pick_prev_key = f"{prefix}_quick_pick_prev"
+        st.text_input("내역", key=memo_key)
 
-    cur_mode = str(st.session_state.get(mode_key, "금액(+)"))
-    cur_pick = str(st.session_state.get(pick_key, "0"))
+        # -------------------------
+        # 빠른 금액(원형 버튼) + 모드(금액+/금액-)
+        # -------------------------
+        st.caption("⚡ 빠른 금액(원형 버튼)")
+        QUICK_AMOUNTS = [0, 10, 20, 50, 100, 200, 500, 1000]
 
-    st.session_state.setdefault(mode_prev_key, cur_mode)
-    st.session_state.setdefault(pick_prev_key, cur_pick)
+        pick_key = f"{prefix}_quick_pick"
+        st.session_state.setdefault(pick_key, "0")
 
-    # ✅ 템플릿 자동세팅/모드변경 직후 1회는 반영 스킵
-    if st.session_state.get(skip_key, False):
-        st.session_state[mode_prev_key] = cur_mode
-        st.session_state[pick_prev_key] = cur_pick
-        st.session_state[skip_key] = False
+        skip_key = f"{prefix}_quick_skip_once"
+        st.session_state.setdefault(skip_key, False)
 
-    else:
-        prev_mode = str(st.session_state.get(mode_prev_key, cur_mode))
-        prev_pick = str(st.session_state.get(pick_prev_key, cur_pick))
+        def _on_mode_change():
+            st.session_state[pick_key] = "0"
+            st.session_state[skip_key] = True
+            st.session_state[f"{prefix}_quick_pick_prev"] = "0"
+            st.session_state[f"{prefix}_quick_mode_prev"] = str(st.session_state.get(mode_key, "금액(+)"))
 
-        # 1) 모드만 바뀐 경우: 계산 금지(그냥 prev 갱신)
-        if cur_mode != prev_mode:
+        st.radio(
+            "적용",
+            ["금액(+)", "금액(-)"],
+            horizontal=True,
+            key=mode_key,
+            on_change=_on_mode_change,
+        )
+
+        st.markdown("<div class='round-btns'>", unsafe_allow_html=True)
+        opts = [str(a) for a in QUICK_AMOUNTS]
+        st.radio(
+            "빠른금액",
+            opts,
+            horizontal=True,
+            label_visibility="collapsed",
+            key=pick_key,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        mode_prev_key = f"{prefix}_quick_mode_prev"
+        pick_prev_key = f"{prefix}_quick_pick_prev"
+
+        cur_mode = str(st.session_state.get(mode_key, "금액(+)"))
+        cur_pick = str(st.session_state.get(pick_key, "0"))
+
+        st.session_state.setdefault(mode_prev_key, cur_mode)
+        st.session_state.setdefault(pick_prev_key, cur_pick)
+
+        # ✅ 템플릿 자동세팅/모드변경 직후 1회는 반영 스킵
+        if st.session_state.get(skip_key, False):
             st.session_state[mode_prev_key] = cur_mode
             st.session_state[pick_prev_key] = cur_pick
+            st.session_state[skip_key] = False
+        else:
+            prev_mode = str(st.session_state.get(mode_prev_key, cur_mode))
+            prev_pick = str(st.session_state.get(pick_prev_key, cur_pick))
 
-        # 2) 숫자가 바뀐 경우: 이때만 계산
-        elif cur_pick != prev_pick:
-            st.session_state[pick_prev_key] = cur_pick
-            _apply_amt(int(cur_pick))
-            st.rerun()
+            # 1) 모드만 바뀐 경우: 계산 금지(그냥 prev 갱신)
+            if cur_mode != prev_mode:
+                st.session_state[mode_prev_key] = cur_mode
+                st.session_state[pick_prev_key] = cur_pick
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.number_input("입금", min_value=0, step=1, key=dep_key)
-    with c2:
-        st.number_input("출금", min_value=0, step=1, key=wd_key)
+            # 2) 숫자가 바뀐 경우: 이때만 계산
+            elif cur_pick != prev_pick:
+                st.session_state[pick_prev_key] = cur_pick
+                _apply_amt(int(cur_pick))
 
-    memo = str(st.session_state.get(memo_key, "") or "").strip()
-    dep = int(st.session_state.get(dep_key, 0) or 0)
-    wd = int(st.session_state.get(wd_key, 0) or 0)
+                # ✅ fragment 모드에서는 st.rerun() 금지 (전체 rerun 방지)
+                if not use_fragment:
+                    st.rerun()
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input("입금", min_value=0, step=1, key=dep_key)
+        with c2:
+            st.number_input("출금", min_value=0, step=1, key=wd_key)
+
+        memo = str(st.session_state.get(memo_key, "") or "").strip()
+        dep = int(st.session_state.get(dep_key, 0) or 0)
+        wd = int(st.session_state.get(wd_key, 0) or 0)
+        st.session_state[out_key] = (memo, dep, wd)
+
+    # ✅ fragment가 있으면 "이 UI 부분만" 부분 rerun
+    if use_fragment:
+        @_frag
+        def _frag_draw():
+            _draw_ui()
+
+        _frag_draw()
+    else:
+        _draw_ui()
+
+    # 밖에서는 session_state에서 값을 꺼내 반환(저장 버튼 눌렀을 때 최신값으로 잡힘)
+    memo, dep, wd = st.session_state.get(out_key, ("", 0, 0))
     return memo, dep, wd
 
 # =========================
@@ -2407,3 +2434,4 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
