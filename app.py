@@ -1554,6 +1554,17 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
     st.session_state.setdefault(mode_key, "금액(+)")
     st.session_state.setdefault(prev_key, None)
 
+        # ✅ 저장 후 reset 요청이 들어오면, 위젯 생성 전에 초기화
+    reset_flag_key = f"{prefix}_reset_request"
+    if st.session_state.get(reset_flag_key, False):
+        st.session_state[memo_key] = ""
+        st.session_state[dep_key] = 0
+        st.session_state[wd_key] = 0
+        st.session_state[tpl_key] = "(직접 입력)"
+        st.session_state[mode_key] = "금액(+)"
+        st.session_state[prev_key] = None
+        st.session_state[reset_flag_key] = False
+
     def _get_net() -> int:
         dep = int(st.session_state.get(dep_key, 0) or 0)
         wd = int(st.session_state.get(wd_key, 0) or 0)
@@ -2361,17 +2372,8 @@ with sub1:
                                 df_new = df_new.sort_values("created_at_utc", ascending=False)
                             st.session_state.data[name]["df_tx"] = df_new
 
-                    # 3) 입력값 초기화(설정탭 느낌으로 즉시 초기화)
                     pfx = f"user_trade_{name}"
-                    st.session_state[f"{pfx}_memo"] = ""
-                    st.session_state[f"{pfx}_dep"] = 0
-                    st.session_state[f"{pfx}_wd"] = 0
-                    st.session_state[f"{pfx}_tpl"] = "(직접 입력)"
-                    st.session_state[f"{pfx}_tpl_prev"] = "(직접 입력)"
-                    st.session_state[f"{pfx}_mode"] = "금액(+)"
-                    st.session_state[f"{pfx}_quick_skip_once"] = False
-                    st.session_state[f"{pfx}_quick_apply_sig"] = ""
-                    st.session_state[f"{pfx}_quick_pick"] = "0"
+                    st.session_state[f"{pfx}_reset_request"] = True
 
                     st.rerun()
                 else:
@@ -2496,6 +2498,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
