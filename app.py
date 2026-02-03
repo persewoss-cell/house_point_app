@@ -2199,7 +2199,7 @@ if st.session_state.admin_ok:
     # 📒 전체통장(사람별 통장 내역)
     # -------------------------
     with tabs[1]:
-        st.subheader("📒 전체통장(사람별 통장 내역)")
+        st.subheader("📒 전체통장 내역")
         for a in filtered:
             nm, sid = a["name"], a["student_id"]
             sres = api_savings_list_by_student_id(sid)
@@ -2493,6 +2493,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
