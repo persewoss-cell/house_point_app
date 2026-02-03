@@ -1206,7 +1206,10 @@ def render_active_savings_list(savings: list[dict], name: str, pin: str, balance
             interest2 = int(s["interest"])
             mdt = s.get("maturity_date")
             mkr = format_kr_datetime(mdt.astimezone(KST)) if isinstance(mdt, datetime) else ""
-            st.write(f"- 원금 **{principal}**, 기간 **{weeks}주**, 만기일 **{mkr}**, 만기 이자 **{interest2}**")
+            total_amt = principal + interest2
+            st.write(
+                f"- 원금 **{principal}**, 기간 **{weeks}주**, 만기일 **{mkr}**, 만기 이자 **{interest2}**, 만기시 총 금액 **{total_amt}**"
+            )
 
             if st.button("해지", key=f"sv_cancel_btn_{name}_{sid}", use_container_width=True):
                 st.session_state[f"sv_cancel_confirm_{sid}"] = True
@@ -2490,6 +2493,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
