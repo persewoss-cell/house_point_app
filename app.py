@@ -1367,7 +1367,7 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
 
     st.progress(exp_ratio)
     st.write(
-        f"예상 달성률(목표일 기준 예상 내 자산): **{exp_ratio*100:.1f}%** "
+        f"예상 달성률(목표일 기준 총 자산): **{exp_ratio*100:.1f}%** "
         f"(예상 {expected_amount} / 목표 {goal_amount})"
     )
 
@@ -2490,6 +2490,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
