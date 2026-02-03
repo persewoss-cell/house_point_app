@@ -1241,7 +1241,7 @@ def render_active_savings_list(savings: list[dict], name: str, pin: str, balance
 
 
 def render_goal_section(name: str, pin: str, balance: int, savings_list: list[dict]):
-    st.markdown("### 🎯 목표 저금(목표 설정/달성률)")
+    st.markdown("### 🎯 목표 저금")
     goal = st.session_state.data.get(name, {}).get("goal", {"ok": False})
     if not goal.get("ok"):
         st.error(goal.get("error", "목표 정보를 불러오지 못했어요."))
@@ -1305,9 +1305,9 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
     now_ratio = clamp01((current_balance / goal_amount) if goal_amount > 0 else 0)
     exp_ratio = clamp01((expected_amount / goal_amount) if goal_amount > 0 else 0)
 
-    st.write(f"현재 잔액 기준: **{now_ratio*100:.1f}%** (현재 {current_balance} / 목표 {goal_amount})")
+    st.write(f"통장 잔액 기준: **{now_ratio*100:.1f}%** (현재 {current_balance} / 목표 {goal_amount})")
     st.progress(exp_ratio)
-    st.write(f"목표일까지 예상 달성률: **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
+    st.write(f"총 자산 기준 예상 달성률: **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
 
     if principal_all_active > 0:
         st.info(f"📌 진행 중 적금 원금 **+{principal_all_active}** 포함 (목표일 이후 만기 적금은 원금만 반영)")
@@ -2490,6 +2490,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
