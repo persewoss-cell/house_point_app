@@ -2208,7 +2208,7 @@ if st.session_state.admin_ok:
             bal_now = int(a.get("balance", 0) or 0)
             asset_total = bal_now + sv_total
 
-            with st.expander(f"👤 {nm} | 내자산 {asset_total} · 잔액 {bal_now} · 적금 {sv_total}", expanded=False):
+            with st.expander(f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total}", expanded=False):
                 render_asset_summary(bal_now, savings)
                 st.markdown("### 📒 통장내역")
                 txr = api_get_txs_by_student_id(sid, limit=120)
@@ -2493,6 +2493,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
