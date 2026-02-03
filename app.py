@@ -255,7 +255,7 @@ def render_asset_summary(balance_now: int, savings_list: list[dict]):
     asset_total = int(balance_now) + int(sv_total)
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric("내 자산", f"{asset_total}")
+        st.metric("총 자산", f"{asset_total}")
     with c2:
         st.metric("통장 잔액", f"{int(balance_now)}")
     with c3:
@@ -2303,7 +2303,7 @@ sv_total = sum(int(s.get("principal", 0) or 0) for s in savings_list if str(s.ge
 asset_total = balance + sv_total
 
 st.markdown(f"## 🧾 {name} 통장")
-st.markdown(f"### 내 자산: **{asset_total} 포인트**")
+st.markdown(f"### 총 자산: **{asset_total} 포인트**")
 st.markdown(f"#### 통장 잔액: **{balance} 포인트**")
 st.markdown(f"#### 적금 총액: **{sv_total} 포인트**")
 
@@ -2490,6 +2490,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
