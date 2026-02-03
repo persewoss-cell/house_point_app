@@ -1610,6 +1610,11 @@ def render_admin_trade_ui(prefix: str, templates_list: list, template_by_display
         if sel != st.session_state.get(tpl_prev_key):
             st.session_state[tpl_prev_key] = sel
 
+                        # ✅ 템플릿 바꾸면 "빠른금액 원형버튼" 선택만 0으로 리셋 (금액칸은 유지)
+            st.session_state[f"{prefix}_quick_pick"] = "0"
+            st.session_state[f"{prefix}_quick_pick_prev"] = "0"
+            st.session_state[f"{prefix}_quick_skip_once"] = True
+
             if sel != "(직접 입력)":
                 tpl = template_by_display.get(sel)
                 if tpl:
@@ -2498,6 +2503,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
