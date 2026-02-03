@@ -2179,7 +2179,7 @@ if st.session_state.admin_ok:
         # -------------------------------------------------
         # 4) PIN 재설정 (맨 아래)
         # -------------------------------------------------
-        st.markdown("### 🔧 PIN 재설정 (맨 아래)")
+        st.markdown("### 🔧 PIN 재설정")
         target = st.text_input("대상 학생 이름", key="reset_target_setting").strip()
         newp = st.text_input("새 PIN(4자리)", key="reset_pin_setting", type="password").strip()
 
@@ -2493,6 +2493,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
