@@ -1371,8 +1371,11 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
         f"(예상 {expected_amount} / 목표 {goal_amount})"
     )
 
-    if goal_date and bonus > 0:
-        st.caption(f"※ 목표일({goal_date.isoformat()}) 전 만기 적금 수령액(원금+이자) +{bonus} 포함")
+    if goal_date and (principal_all_active > 0 or interest_before_goal > 0):
+        st.caption(
+            f"※ 진행 중 적금 원금 +{principal_all_active} 포함 / "
+            f"목표일({goal_date.isoformat()}) 이전 만기 이자 +{interest_before_goal} 포함"
+        )
 
 
 # =========================
@@ -2487,6 +2490,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
