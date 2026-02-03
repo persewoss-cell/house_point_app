@@ -27,6 +27,9 @@ st.markdown(
         section.main > div:first-child { padding-top: 3.2rem; }
     }
     .block-container { padding-bottom: 2.0rem; }
+    @media (max-width: 768px) {
+        .block-container { padding-bottom: 6.0rem; }
+    }
 
     /* radio → 버튼처럼 */
     div[role="radiogroup"] > label {
@@ -2493,6 +2496,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
