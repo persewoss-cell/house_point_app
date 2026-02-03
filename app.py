@@ -1281,31 +1281,40 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
     goal_date = g_date
     current_balance = int(balance)
 
-    bonus = 0
+    # ✅ 목표 계산:
+    # - 진행중(active) 적금은 "자산"이므로 원금은 항상 포함
+    # - 목표 날짜 이전 만기되는 적금만 이자까지 포함
+    principal_all_active = 0
+    interest_before_goal = 0
+
     for s in savings_list:
         if str(s.get("status", "")).lower().strip() != "active":
             continue
-        mdt = s.get("maturity_date")
-        if not isinstance(mdt, datetime):
-            continue
-        m_date = mdt.astimezone(KST).date()
-        if m_date <= goal_date:
-            principal = int(s.get("principal", 0) or 0)
-            interest3 = int(s.get("interest", 0) or 0)
-            bonus += (principal + interest3)
 
-    expected_amount = current_balance + bonus
+        principal = int(s.get("principal", 0) or 0)
+        interest3 = int(s.get("interest", 0) or 0)
+        principal_all_active += principal
+
+        mdt = s.get("maturity_date")
+        if isinstance(mdt, datetime):
+            m_date = mdt.astimezone(KST).date()
+            if m_date <= goal_date:
+                interest_before_goal += interest3
+
+    expected_amount = current_balance + principal_all_active + interest_before_goal
     now_ratio = clamp01((current_balance / goal_amount) if goal_amount > 0 else 0)
     exp_ratio = clamp01((expected_amount / goal_amount) if goal_amount > 0 else 0)
 
     st.write(f"현재 잔액 기준: **{now_ratio*100:.1f}%** (현재 {current_balance} / 목표 {goal_amount})")
     st.progress(exp_ratio)
     st.write(f"목표일까지 예상 달성률: **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
-    if bonus > 0:
-        st.info(f"📌 목표 날짜({goal_date.isoformat()}) 이전 만기 적금 수령액(원금+이자) **+{bonus}** 포함")
-    else:
-        st.caption("목표 날짜 이전 만기 적금이 없어 예상 금액은 현재 잔액과 같아요.")
 
+    if principal_all_active > 0:
+        st.info(f"📌 진행 중 적금 원금 **+{principal_all_active}** 포함 (목표일 이후 만기 적금은 원금만 반영)")
+    if interest_before_goal > 0:
+        st.caption(f"※ 목표일({goal_date.isoformat()}) 이전 만기 적금 이자 **+{interest_before_goal}** 포함")
+    if principal_all_active == 0 and interest_before_goal == 0:
+        st.caption("진행 중 적금이 없어 예상 금액은 현재 잔액과 같아요.")
 
 def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[dict]):
     """ ✅ (3번) 관리자 개별 탭: 목표 '조회'만 가능(수정/설정 UI 없음) """
@@ -1329,21 +1338,25 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
         except Exception:
             goal_date = None
 
-    bonus = 0
+    principal_all_active = 0
+    interest_before_goal = 0
+
     if goal_date:
         for s in savings or []:
             if str(s.get("status", "")).lower().strip() != "active":
                 continue
-            mdt = s.get("maturity_date")
-            if not isinstance(mdt, datetime):
-                continue
-            m_date = mdt.astimezone(KST).date()
-            if m_date <= goal_date:
-                principal = int(s.get("principal", 0) or 0)
-                interest3 = int(s.get("interest", 0) or 0)
-                bonus += (principal + interest3)
 
-    expected_amount = int(balance_now) + int(bonus)
+            principal = int(s.get("principal", 0) or 0)
+            interest3 = int(s.get("interest", 0) or 0)
+            principal_all_active += principal
+
+            mdt = s.get("maturity_date")
+            if isinstance(mdt, datetime):
+                m_date = mdt.astimezone(KST).date()
+                if m_date <= goal_date:
+                    interest_before_goal += interest3
+
+    expected_amount = int(balance_now) + int(principal_all_active) + int(interest_before_goal)
     exp_ratio = clamp01(expected_amount / goal_amount if goal_amount > 0 else 0)
 
     st.write(f"- 목표 금액: **{goal_amount}**")
@@ -2474,5 +2487,6 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
