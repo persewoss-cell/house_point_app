@@ -1866,7 +1866,7 @@ if st.session_state.admin_ok:
                 st.session_state.tpl_sort_panel_open = not st.session_state.tpl_sort_panel_open
                 st.rerun()
         with h2:
-            st.markdown("### 🧩 내역 템플릿 순서 정렬 (PC촘촘 / 모바일간단모드)")
+            st.markdown("### 🧩 내역 템플릿 순서 정렬")
 
         if not st.session_state.tpl_sort_panel_open:
             st.caption("펼치려면 왼쪽 화살표(▸)를 눌러주세요.")
@@ -2493,6 +2493,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
