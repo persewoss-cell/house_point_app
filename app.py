@@ -154,12 +154,47 @@ st.markdown(f'<div class="app-title">🏦 {APP_TITLE}</div>', unsafe_allow_html=
 # =========================
 @st.cache_resource
 def init_firestore():
-    firebase_dict = dict(st.secrets["firebase"])
+    """
+    Streamlit secrets의 firebase 서비스계정 정보를 안전하게 정규화해서 초기화.
+    - private_key의 '\\n' -> '\n' 변환
+    - JSON 문자열로 들어온 경우도 처리
+    """
+    fb = st.secrets.get("firebase", None)
+    if fb is None:
+        raise ValueError("st.secrets에 [firebase] 섹션이 없습니다. .streamlit/secrets.toml을 확인하세요.")
+
+    # 1) fb가 dict/Mapping이면 그대로 dict로
+    try:
+        firebase_dict = dict(fb)
+    except Exception:
+        firebase_dict = fb  # 혹시 문자열일 수 있음
+
+    # 2) JSON 문자열로 들어온 경우 처리
+    if isinstance(firebase_dict, str):
+        import json
+        firebase_dict = json.loads(firebase_dict)
+
+    if not isinstance(firebase_dict, dict):
+        raise ValueError("firebase secrets 형식이 올바르지 않습니다. (dict 또는 JSON string이어야 함)")
+
+    # 3) private_key 줄바꿈 정규화 (가장 흔한 원인)
+    pk = firebase_dict.get("private_key", "")
+    if isinstance(pk, str):
+        pk = pk.replace("\\n", "\n")
+        firebase_dict["private_key"] = pk
+
+    # 4) 최소 필수 키 체크(원인 파악 도움)
+    required = ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id"]
+    missing = [k for k in required if not firebase_dict.get(k)]
+    if missing:
+        raise ValueError(f"firebase secrets 누락 키: {missing} (secrets.toml의 firebase 항목을 확인하세요)")
+
     cred = credentials.Certificate(firebase_dict)
+
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)
-    return firestore.client()
 
+    return firestore.client()
 
 db = init_firestore()
 
@@ -2503,6 +2538,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
