@@ -31,6 +31,9 @@ if "data" not in st.session_state or not isinstance(st.session_state.get("data")
 if "last_maturity_check" not in st.session_state or not isinstance(st.session_state.get("last_maturity_check"), dict):
     st.session_state["last_maturity_check"] = {}
 
+# ✅ (PATCH) 새 탭/새 세션에서 'delete_confirm' 키가 없어 앱이 죽는 현상 방지
+st.session_state.setdefault("delete_confirm", False)
+
 
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
