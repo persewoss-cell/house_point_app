@@ -2087,10 +2087,10 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     if pending:
         st.markdown("#### 💸 투자 회수(지급)")
         can_redeem_now = _can_redeem(my_student_id)
-        if (not is_admin) and (not can_redeem_now):
+        can_pay_now = bool(is_admin or can_redeem_now)
+        if not can_pay_now:
             st.info("투자 회수는 관리자 또는 '투자증권' 직업 학생만 할 수 있어요.")
-        else:
-            for x in pending[:100]:
+        for x in pending[:100]:
                 doc_id = str(x.get("_doc_id", "") or "")
                 sid = str(x.get("_student_id", "") or "")
                 pid = str(x.get("_product_id", "") or "")
@@ -2115,7 +2115,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                     st.caption(f"매입 {buy_price:.1f} → 현재 {cur_price:.1f} (차이 {diff:.1f})")
                     st.caption(f"수익/손실 {profit:.1f} | 찾을 금액 {redeem_amt}")
                 with c4:
-                    if st.button("지급", use_container_width=True, key=f"inv_pay_{doc_id}"):
+                    if can_pay_now and st.button("지급", use_container_width=True, key=f"inv_pay_{doc_id}"):
     
                         sell_dt = datetime.now(tz=KST)
                         sell_label = _fmt_kor_date_md(sell_dt)
