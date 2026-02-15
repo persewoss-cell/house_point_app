@@ -24,6 +24,15 @@ ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
 
 # =========================
+# ✅ 세션 상태(캐시/가드) 초기화
+# =========================
+if "data" not in st.session_state or not isinstance(st.session_state.get("data"), dict):
+    st.session_state["data"] = {}
+if "last_maturity_check" not in st.session_state or not isinstance(st.session_state.get("last_maturity_check"), dict):
+    st.session_state["last_maturity_check"] = {}
+
+
+# =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
 # =========================
 st.markdown(
