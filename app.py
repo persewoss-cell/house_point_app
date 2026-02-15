@@ -1780,330 +1780,49 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                                 chart_rows.append({"변동사유": reason2, "변동 후": round(pa2, 1)})
     
                             cdf = pd.DataFrame(chart_rows)
-    
+
                             if not cdf.empty:
-                                order = cdf["변동사유"].tolist()
-    
-                                chart_df = cdf.copy().reset_index(drop=True)
-
-
-    
-                                # ✅ (PATCH) 구간별 상승/하락/보합 색상 + 점(회색) 표시
-
-    
-                                chart_df["prev_price"] = chart_df["변동 후"].shift(1)
-
-
-    
-                                def _dir(_row):
-
-    
-                                    p = _row.get("prev_price")
-
-    
-                                    v = _row.get("변동 후")
-
-    
-                                    if pd.isna(p) or pd.isna(v):
-
-    
-                                        return "same"
-
-    
-                                    if v > p:
-
-    
-                                        return "up"
-
-    
-                                    if v < p:
-
-    
-                                        return "down"
-
-    
-                                    return "same"
-
-
-    
-                                chart_df["direction"] = chart_df.apply(_dir, axis=1)
-
-    
-                                chart_df["x2"] = chart_df["변동사유"].shift(-1)
-
-    
-                                chart_df["y2"] = chart_df["변동 후"].shift(-1)
-
-    
-                                seg_df = chart_df.dropna(subset=["x2"]).copy()
-
-                                # ✅ 구간(현재→다음) 기준으로 상승/하락/보합 판정
-                                def _seg_dir(_r):
-                                    y1 = _r.get("변동 후")
-                                    y2 = _r.get("y2")
-                                    if pd.isna(y1) or pd.isna(y2):
-                                        return "same"
-                                    if float(y2) > float(y1):
-                                        return "up"
-                                    if float(y2) < float(y1):
-                                        return "down"
-                                    return "same"
-                                seg_df["direction_seg"] = seg_df.apply(_seg_dir, axis=1)
-
-
-    
-                                # ✅ (PATCH) 주가 변동 그래프: altair 없이도 항상 표시
                                 try:
-                                    _df = seg_df.copy()
-                                    _idx_col = None
-                                    for _c in ['date','time','created_at','ts','timestamp']:
-                                        if _c in _df.columns:
-                                            _idx_col = _c
-                                            break
-                                    if _idx_col:
-                                        _df[_idx_col] = pd.to_datetime(_df[_idx_col], errors='coerce')
-                                        _df = _df.sort_values(_idx_col).set_index(_idx_col)
-                                    _price_col = None
-                                    for _c in ['price','current_price','value','close','y']:
-                                        if _c in _df.columns:
-                                            _price_col = _c
-                                            break
-                                    if _price_col is None:
-                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
-                                        _price_col = num_cols[0] if num_cols else None
-                                    if _price_col is not None:
-                                        st.line_chart(_df[_price_col])
+                                    import matplotlib.pyplot as plt
+
+                                    # x축: 변동 순서(시작주가 → ... → 최신)
+                                    prices = [float(x) for x in cdf["변동 후"].tolist()]
+                                    labels = [str(x) for x in cdf["변동사유"].tolist()]
+                                    xs = list(range(len(prices)))
+
+                                    fig, ax = plt.subplots(figsize=(8.0, 4.0))
+
+                                    # ✅ 구간별 색상: 상승=빨강, 하락=파랑, 보합=검정
+                                    for i in range(len(prices) - 1):
+                                        y1, y2 = prices[i], prices[i + 1]
+                                        if y2 > y1:
+                                            col = "red"
+                                        elif y2 < y1:
+                                            col = "blue"
+                                        else:
+                                            col = "black"
+                                        ax.plot([xs[i], xs[i + 1]], [y1, y2], color=col, linewidth=2.5)
+
+                                    # ✅ 변동 지점(회색 점): '시작주가' 제외한 나머지
+                                    if len(prices) >= 2:
+                                        ax.scatter(xs[1:], prices[1:], color="gray", s=30, zorder=3)
+
+                                    # 축/그리드/라벨
+                                    ax.set_ylim(bottom=0)
+                                    ax.grid(True, alpha=0.25)
+
+                                    # 라벨이 많으면 겹치므로 간단히 표시(처음/중간/마지막)
+                                    if len(labels) <= 8:
+                                        ax.set_xticks(xs)
+                                        ax.set_xticklabels(labels, rotation=0, ha="center")
                                     else:
-                                        st.info('주가 변동 데이터를 표시할 수 없어요(가격 컬럼 없음).')
+                                        keep = sorted(set([0, len(labels)//2, len(labels)-1]))
+                                        ax.set_xticks([xs[i] for i in keep])
+                                        ax.set_xticklabels([labels[i] for i in keep], rotation=0, ha="center")
+
+                                    st.pyplot(fig, use_container_width=True)
                                 except Exception:
-                                    st.info('주가 변동 그래프를 표시하지 못했어요(데이터 형식 확인 필요).')
-                    if hist:
-                        rows = []
-                        for h in hist:
-                            dt = _ts_to_dt(h.get("created_at"))
-                            pb = float(h.get("price_before", 0.0) or 0.0)
-                            pa = float(h.get("price_after", 0.0) or 0.0)
-                            diff = round(pa - pb, 1)
-    
-                            # 변동일시: 0월 0일(요일) 오전/오후 00시 00분
-                            def _fmt_kor_datetime(dt_obj):
-                                if not dt_obj:
-                                    return "-"
-                                try:
-                                    dt_kst = dt_obj.astimezone(KST)
-                                except Exception:
-                                    dt_kst = dt_obj
-    
-                                hour = dt_kst.hour
-                                ampm = "오전" if hour < 12 else "오후"
-                                hh = hour if 1 <= hour <= 12 else (hour - 12 if hour > 12 else 12)
-                                return f"{dt_kst.month}월 {dt_kst.day}일({days_ko[dt_kst.weekday()]}) {ampm} {hh:02d}시 {dt_kst.minute:02d}분"
-    
-                            # 주가 등락 표시 (요청: 하락은 파란 아이콘+파란 글씨)
-                            if diff > 0:
-                                diff_view = f"<span style='color:red'>▲ +{diff:.1f}</span>"
-                            elif diff < 0:
-                                diff_view = f"<span style='color:blue'>▼ {diff:.1f}</span>"
-                            else:
-                                diff_view = "-"
-    
-                            rows.append(
-                                {
-                                    "변동일시": _fmt_kor_datetime(dt),
-                                    "변동사유": h.get("reason", "") or "",
-                                    "주가": f"{pa:.1f}",          # ✅ '변동 후' → '주가'
-                                    "주가 등락": diff_view,
-                                }
-                            )
-    
-                        df = pd.DataFrame(rows)
-    
-                        # ✅ 표(왼쪽) + 꺾은선 그래프(오른쪽)
-                        left, right = st.columns([1.7,2.2], gap="large")
-    
-                        with left:
-                            st.markdown(
-                                df.to_html(escape=False, index=False, classes="inv_hist_table"),
-                                unsafe_allow_html=True,
-                            )
-    
-                        with right:
-                            # 가로: 변동사유 / 세로: 변동 후(주가)
-                            chart_rows = []
-    
-                            # ✅ 초기주가 1점 추가
-                            # - 변동 기록이 있으면: 가장 오래된 기록의 price_before가 '초기주가'
-                            # - 변동 기록이 없으면: 현재주가를 초기로 표시
-                            init_price = None
-                            if hist:
-                                oldest = hist[-1]  # hist는 최신순이라 마지막이 가장 오래됨
-                                init_price = float(oldest.get("price_before", 0.0) or 0.0)
-                            if init_price is None:
-                                init_price = float(p.get("current_price", 0.0) or 0.0)
-    
-                            chart_rows.append({"변동사유": "시작주가", "변동 후": round(init_price, 1)})
-    
-                            # ✅ 이후 변동(오래된→최신)
-                            for h2 in reversed(hist):
-                                reason2 = str(h2.get("reason", "") or "").strip() or "-"
-                                pa2 = float(h2.get("price_after", 0.0) or 0.0)
-                                chart_rows.append({"변동사유": reason2, "변동 후": round(pa2, 1)})
-    
-                            cdf = pd.DataFrame(chart_rows)
-    
-                            if not cdf.empty:
-                                order = cdf["변동사유"].tolist()
-    
-                                chart_df = cdf.copy().reset_index(drop=True)
-
-
-    
-                                # ✅ (PATCH) 구간별 상승/하락/보합 색상 + 점(회색) 표시
-
-    
-                                chart_df["prev_price"] = chart_df["변동 후"].shift(1)
-
-
-    
-                                def _dir(_row):
-
-    
-                                    p = _row.get("prev_price")
-
-    
-                                    v = _row.get("변동 후")
-
-    
-                                    if pd.isna(p) or pd.isna(v):
-
-    
-                                        return "same"
-
-    
-                                    if v > p:
-
-    
-                                        return "up"
-
-    
-                                    if v < p:
-
-    
-                                        return "down"
-
-    
-                                    return "same"
-
-
-    
-                                chart_df["direction"] = chart_df.apply(_dir, axis=1)
-
-    
-                                chart_df["x2"] = chart_df["변동사유"].shift(-1)
-
-    
-                                chart_df["y2"] = chart_df["변동 후"].shift(-1)
-
-    
-                                seg_df = chart_df.dropna(subset=["x2"]).copy()
-
-                                # ✅ 구간(현재→다음) 기준으로 상승/하락/보합 판정
-                                def _seg_dir(_r):
-                                    y1 = _r.get("변동 후")
-                                    y2 = _r.get("y2")
-                                    if pd.isna(y1) or pd.isna(y2):
-                                        return "same"
-                                    if float(y2) > float(y1):
-                                        return "up"
-                                    if float(y2) < float(y1):
-                                        return "down"
-                                    return "same"
-                                seg_df["direction_seg"] = seg_df.apply(_seg_dir, axis=1)
-
-
-    
-                                # ✅ (PATCH) 주가 변동 그래프: altair 없이도 항상 표시
-                                try:
-                                    _df = seg_df.copy()
-                                    _idx_col = None
-                                    for _c in ['date','time','created_at','ts','timestamp']:
-                                        if _c in _df.columns:
-                                            _idx_col = _c
-                                            break
-                                    if _idx_col:
-                                        _df[_idx_col] = pd.to_datetime(_df[_idx_col], errors='coerce')
-                                        _df = _df.sort_values(_idx_col).set_index(_idx_col)
-                                    _price_col = None
-                                    for _c in ['price','current_price','value','close','y']:
-                                        if _c in _df.columns:
-                                            _price_col = _c
-                                            break
-                                    if _price_col is None:
-                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
-                                        _price_col = num_cols[0] if num_cols else None
-                                    if _price_col is not None:
-                                        st.line_chart(_df[_price_col])
-                                    else:
-                                        st.info('주가 변동 데이터를 표시할 수 없어요(가격 컬럼 없음).')
-                                except Exception:
-                                    st.info('주가 변동 그래프를 표시하지 못했어요(데이터 형식 확인 필요).')
-    # -------------------------------------------------
-    st.markdown("### 🧾 투자 상품 관리 장부")
-    
-    ledger_rows = _load_ledger(None if is_admin else my_student_id)
-    
-    view_rows = []
-    for x in ledger_rows:
-        redeemed = bool(x.get("redeemed", False))
-        view_rows.append(
-            {
-                "번호": int(x.get("no", 0) or 0),
-                "이름": str(x.get("name", "") or ""),
-                "종목": str(x.get("product_name", "") or ""),
-                "매입일자": str(x.get("buy_date_label", "") or ""),
-                "매입 주가": f"{_as_price1(x.get('buy_price', 0.0)):.1f}",
-                "투자 금액": int(x.get("invest_amount", 0) or 0),
-                "지급완료": "✅" if redeemed else "",
-                "매수일자": str(x.get("sell_date_label", "") or ""),
-                "매수 주가": f"{_as_price1(x.get('sell_price', 0.0)):.1f}" if redeemed else "",
-                "주가차이": f"{_as_price1(x.get('diff', 0.0)):.1f}" if redeemed else "",
-                "수익/손실금": int(round(float(x.get("profit", 0.0) or 0.0))) if redeemed else "",
-                "찾을 금액": int(x.get("redeem_amount", 0) or 0) if redeemed else "",
-                "_doc_id": x.get("_doc_id"),
-                "_student_id": x.get("student_id"),
-                "_product_id": x.get("product_id"),
-                "_buy_price": x.get("buy_price"),
-                "_invest_amount": x.get("invest_amount"),
-            }
-        )
-    
-    if view_rows:
-        st.dataframe(pd.DataFrame(view_rows).drop(columns=["_doc_id","_student_id","_product_id","_buy_price","_invest_amount"], errors="ignore"),
-                     use_container_width=True, hide_index=True)
-    else:
-        st.caption("투자 내역이 없습니다.")
-    
-    # -------------------------------------------------
-    # 2-1) 지급(회수) 처리
-    # -------------------------------------------------
-    pending = [x for x in view_rows if not any([x.get("지급완료") == "✅"])]
-    if pending:
-        st.markdown("#### 💸 투자 회수(지급)")
-        can_redeem_now = _can_redeem(my_student_id)
-        if (not is_admin) and (not can_redeem_now):
-            st.info("투자 회수는 관리자 또는 '투자증권' 직업 학생만 할 수 있어요.")
-        else:
-            for x in pending[:100]:
-                doc_id = str(x.get("_doc_id", "") or "")
-                sid = str(x.get("_student_id", "") or "")
-                pid = str(x.get("_product_id", "") or "")
-                buy_price = _as_price1(x.get("_buy_price", 0.0))
-                invest_amt = int(x.get("_invest_amount", 0) or 0)
-                prod_name = str(x.get("종목", "") or "")
-    
-                # 현재 주가 찾기
-                cur_price = buy_price
-                for p in products:
+                                    st.info("주가 변동 그래프를 표시하지 못했어요(그래프 데이터 확인 필요).")
                     if str(p["product_id"]) == pid:
                         cur_price = _as_price1(p["current_price"])
                         break
@@ -2389,18 +2108,13 @@ def _render_jobs_admin_like():
     acc_rows = []
     for d in docs_acc:
         x = d.to_dict() or {}
-        try:
-            no = int(x.get("no", 999999) or 999999)
-        except Exception:
-            no = 999999
         acc_rows.append(
             {
                 "student_id": d.id,
-                "no": no,
                 "name": str(x.get("name", "") or ""),
             }
         )
-    acc_rows.sort(key=lambda r: (r["no"], r["name"]))
+    acc_rows.sort(key=lambda r: (r["name"]))
 
     # ✅ (PATCH) 드롭다운 라벨에서 '999999' 같은 번호를 화면에 표시하지 않음
     # - 기본은 이름만 표시
@@ -2900,7 +2614,7 @@ def _render_jobs_admin_like():
     # -------------------------------------------------
     st.markdown("### 📋 직업/월급 목록")
     status_rows = []
-    id_to_no_name = {r["student_id"]: (r["no"], r["name"]) for r in acc_rows}
+    id_to_name = {r["student_id"]: (r.get("name","") or "") for r in acc_rows}
 
     for r in rows:
         job = r["job"]
@@ -2910,17 +2624,13 @@ def _render_jobs_admin_like():
             sid = str(sid).strip()
             if not sid:
                 continue
-            no, nm = id_to_no_name.get(sid, (999999, ""))
-            status_rows.append({"번호": int(no) if str(no).isdigit() else no, "이름": nm, "직업": job, "월급": salary, "실수령액": net})
+            nm = str(id_to_name.get(sid, "") or "").strip()
+            status_rows.append({"이름": nm, "직업": job, "월급": salary, "실수령액": net})
 
     if status_rows:
         df_status = pd.DataFrame(status_rows)
-        try:
-            df_status["번호_정렬"] = pd.to_numeric(df_status["번호"], errors="coerce").fillna(999999).astype(int)
-            df_status = df_status.sort_values(["번호_정렬", "이름", "직업"], kind="mergesort").drop(columns=["번호_정렬"])
-        except Exception:
-            df_status = df_status.sort_values(["번호", "이름", "직업"], kind="mergesort")
-        st.dataframe(df_status[["번호", "이름", "직업", "월급", "실수령액"]], use_container_width=True, hide_index=True)
+        df_status = df_status.sort_values(["이름", "직업"], kind="mergesort")
+        st.dataframe(df_status[["이름", "직업", "월급", "실수령액"]], use_container_width=True, hide_index=True)
     else:
         st.info("아직 직업이 배정된 학생이 없습니다.")
 
