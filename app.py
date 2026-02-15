@@ -1395,7 +1395,32 @@ def _calc_invest_principal_and_value(student_id: str) -> tuple[int, int]:
         price_by_id = {str(p["product_id"]): float(p.get("current_price", 0.0) or 0.0) for p in prods_now}
         name_by_id = {str(p["product_id"]): str(p.get("name", "") or "") for p in prods_now}
 
-        rows = _load_ledger(sid)
+        rows = []
+        try:
+            q = (
+                db.collection("invest_ledger")
+                .where(filter=FieldFilter("student_id", "==", str(sid)))
+                .order_by("buy_at", direction=firestore.Query.DESCENDING)
+                .limit(400)
+                .stream()
+            )
+            for d in q:
+                x = d.to_dict() or {}
+                rows.append({**x, "_doc_id": d.id})
+        except Exception:
+            # 인덱스/정렬 실패 대비
+            try:
+                q = (
+                    db.collection("invest_ledger")
+                    .where(filter=FieldFilter("student_id", "==", str(sid)))
+                    .limit(400)
+                    .stream()
+                )
+                for d in q:
+                    x = d.to_dict() or {}
+                    rows.append({**x, "_doc_id": d.id})
+            except Exception:
+                rows = []
 
         principal_total = 0
         eval_total = 0
@@ -1469,13 +1494,36 @@ def _render_price_history_table_and_chart(product: dict):
     except Exception:
         pass
 
+
+    # ✅ (PATCH) created_at 타입이 Timestamp/Datetime/None 등 섞여도 안전 변환
+    def _ts_to_dt_local(v):
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v
+        try:
+            # Firestore Timestamp
+            if hasattr(v, "to_datetime"):
+                out = v.to_datetime()
+                if isinstance(out, datetime):
+                    return out
+        except Exception:
+            pass
+        try:
+            # epoch seconds / millis
+            fv = float(v)
+            if fv > 1e12:  # millis
+                fv = fv / 1000.0
+            return datetime.fromtimestamp(fv, tz=timezone.utc)
+        except Exception:
+            return None
     if not hist:
         st.info("주가 변동 데이터가 아직 없어요.")
         return
 
     rows = []
     for h in hist:
-        dt = _ts_to_dt(h.get("created_at"))
+        dt = _ts_to_dt_local(h.get("created_at"))
         pb = float(h.get("price_before", 0.0) or 0.0)
         pa = float(h.get("price_after", 0.0) or 0.0)
         diff = round(pa - pb, 1)
@@ -1980,7 +2028,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                     if hist:
                         rows = []
                         for h in hist:
-                            dt = _ts_to_dt(h.get("created_at"))
+                            dt = _ts_to_dt_local(h.get("created_at"))
                             pb = float(h.get("price_before", 0.0) or 0.0)
                             pa = float(h.get("price_after", 0.0) or 0.0)
                             diff = round(pa - pb, 1)
