@@ -3282,7 +3282,6 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
     now_ratio = clamp01((now_amount / goal_amount) if goal_amount > 0 else 0)
     exp_ratio = clamp01((expected_amount / goal_amount) if goal_amount > 0 else 0)
 
-    st.write(f"총 자산 기준: **{now_ratio*100:.1f}%** (현재 {now_amount} / 목표 {goal_amount})")
     st.progress(exp_ratio)
     st.write(f"총 자산 기준 예상 달성률: **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
 
@@ -4544,6 +4543,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
