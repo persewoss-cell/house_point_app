@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-# ✅ Altair (차트) - 설치되어 있지 않아도 앱이 죽지 않게 안전 처리
+# ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
 try:
     import altair as alt
 except Exception:
@@ -1852,156 +1852,31 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
 
 
     
-                                        # ✅ (PATCH) 주가 변동 그래프: altair가 없으면 Streamlit 기본 차트로 대체
-        if alt is not None:
-        seg_chart = alt.Chart(seg_df).mark_rule(strokeWidth=3).encode(
-
-    
-                                            x=alt.X(
-
-    
-                                                "변동사유:N",
-
-    
-                                                sort=order,
-
-    
-                                                title=None,
-
-    
-                                                axis=alt.Axis(labelAngle=0)
-            st.altair_chart(seg_chart, use_container_width=True)
-        else:
-            try:
-                # seg_df에 time/date 컬럼이 있으면 인덱스로 설정
-                _df = seg_df.copy()
-                for _c in ['date','time','created_at','ts']:
-                    if _c in _df.columns:
-                        _df[_c] = pd.to_datetime(_df[_c], errors='coerce')
-                        _df = _df.sort_values(_c).set_index(_c)
-                        break
-                # 가격 컬럼 추정
-                _price_col = None
-                for _c in ['price','current_price','value','close']:
-                    if _c in _df.columns:
-                        _price_col = _c
-                        break
-                if _price_col is None:
-                    # 숫자 컬럼 중 첫 번째 사용
-                    num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
-                    _price_col = num_cols[0] if num_cols else None
-                if _price_col is not None:
-                    st.line_chart(_df[_price_col])
-                else:
-                    st.info('주가 변동 데이터를 표시할 수 없어요(가격 컬럼 없음).')
-            except Exception:
-                st.info('주가 변동 그래프는 altair 설치 시 표시됩니다.')
-,
-
-    
-                                    ),
-
-    
-                                    x2="x2:N",
-
-    
-                                    y=alt.Y(
-
-    
-                                        "변동 후:Q",
-
-    
-                                        title=None,
-
-    
-                                        scale=alt.Scale(domain=[50, 100]),
-
-    
-                                    ),
-
-    
-                                    y2="y2:Q",
-
-    
-                                    color=alt.Color(
-
-    
-                                        "direction_seg:N",
-
-    
-                                        scale=alt.Scale(domain=["up", "down", "same"], range=["red", "blue", "black"]),
-
-    
-                                        legend=None,
-
-    
-                                    ),
-
-    
-                                    tooltip=["변동사유", "변동 후"],
-
-    
-                                )
-
-
-    
-                                pt_chart = alt.Chart(chart_df).mark_point(size=55, color="gray").encode(
-
-    
-                                    x=alt.X(
-
-    
-                                        "변동사유:N",
-
-    
-                                        sort=order,
-
-    
-                                        title=None,
-
-    
-                                        axis=alt.Axis(labelAngle=0),
-
-    
-                                    ),
-
-    
-                                    y=alt.Y(
-
-    
-                                        "변동 후:Q",
-
-    
-                                        title=None,
-
-    
-                                        scale=alt.Scale(domain=[50, 100]),
-
-    
-                                    ),
-
-    
-                                    tooltip=["변동사유", "변동 후"],
-
-    
-                                )
-
-
-    
-                                chart = (seg_chart + pt_chart).properties(height=260)
-
-    
-                                st.altair_chart(chart, use_container_width=True)
-                            else:
-                                st.caption("그래프 데이터가 없습니다.")
-    
-                    else:
-                        st.caption("아직 주가 변동 기록이 없습니다.")
-    
-            else:
-                with st.expander(f"{nm} 주가 변동 내역", expanded=False):
-                    # 변동 내역(표)
-                    hist = _get_history(p["product_id"], limit=120)
+                                # ✅ (PATCH) 주가 변동 그래프: altair 없이도 항상 표시
+                                try:
+                                    _df = seg_df.copy()
+                                    _idx_col = None
+                                    for _c in ['date','time','created_at','ts','timestamp']:
+                                        if _c in _df.columns:
+                                            _idx_col = _c
+                                            break
+                                    if _idx_col:
+                                        _df[_idx_col] = pd.to_datetime(_df[_idx_col], errors='coerce')
+                                        _df = _df.sort_values(_idx_col).set_index(_idx_col)
+                                    _price_col = None
+                                    for _c in ['price','current_price','value','close','y']:
+                                        if _c in _df.columns:
+                                            _price_col = _c
+                                            break
+                                    if _price_col is None:
+                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
+                                        _price_col = num_cols[0] if num_cols else None
+                                    if _price_col is not None:
+                                        st.line_chart(_df[_price_col])
+                                    else:
+                                        st.info('주가 변동 데이터를 표시할 수 없어요(가격 컬럼 없음).')
+                                except Exception:
+                                    st.info('주가 변동 그래프를 표시하지 못했어요(데이터 형식 확인 필요).')
                     if hist:
                         rows = []
                         for h in hist:
@@ -2147,127 +2022,31 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
 
 
     
-                                seg_chart = alt.Chart(seg_df).mark_rule(strokeWidth=3).encode(
-
-    
-                                    x=alt.X(
-
-    
-                                        "변동사유:N",
-
-    
-                                        sort=order,
-
-    
-                                        title=None,
-
-    
-                                        axis=alt.Axis(labelAngle=0),
-
-    
-                                    ),
-
-    
-                                    x2="x2:N",
-
-    
-                                    y=alt.Y(
-
-    
-                                        "변동 후:Q",
-
-    
-                                        title=None,
-
-    
-                                        scale=alt.Scale(domain=[50, 100]),
-
-    
-                                    ),
-
-    
-                                    y2="y2:Q",
-
-    
-                                    color=alt.Color(
-
-    
-                                        "direction_seg:N",
-
-    
-                                        scale=alt.Scale(domain=["up", "down", "same"], range=["red", "blue", "black"]),
-
-    
-                                        legend=None,
-
-    
-                                    ),
-
-    
-                                    tooltip=["변동사유", "변동 후"],
-
-    
-                                )
-
-
-    
-                                pt_chart = alt.Chart(chart_df).mark_point(size=55, color="gray").encode(
-
-    
-                                    x=alt.X(
-
-    
-                                        "변동사유:N",
-
-    
-                                        sort=order,
-
-    
-                                        title=None,
-
-    
-                                        axis=alt.Axis(labelAngle=0),
-
-    
-                                    ),
-
-    
-                                    y=alt.Y(
-
-    
-                                        "변동 후:Q",
-
-    
-                                        title=None,
-
-    
-                                        scale=alt.Scale(domain=[50, 100]),
-
-    
-                                    ),
-
-    
-                                    tooltip=["변동사유", "변동 후"],
-
-    
-                                )
-
-
-    
-                                chart = (seg_chart + pt_chart).properties(height=260)
-
-    
-                                st.altair_chart(chart, use_container_width=True)
-                            else:
-                                st.caption("그래프 데이터가 없습니다.")
-    
-                    else:
-                        st.caption("아직 주가 변동 기록이 없습니다.")
-    
-    st.divider()
-    
-    # -------------------------------------------------
-    # 2) 투자 상품 관리 장부
+                                # ✅ (PATCH) 주가 변동 그래프: altair 없이도 항상 표시
+                                try:
+                                    _df = seg_df.copy()
+                                    _idx_col = None
+                                    for _c in ['date','time','created_at','ts','timestamp']:
+                                        if _c in _df.columns:
+                                            _idx_col = _c
+                                            break
+                                    if _idx_col:
+                                        _df[_idx_col] = pd.to_datetime(_df[_idx_col], errors='coerce')
+                                        _df = _df.sort_values(_idx_col).set_index(_idx_col)
+                                    _price_col = None
+                                    for _c in ['price','current_price','value','close','y']:
+                                        if _c in _df.columns:
+                                            _price_col = _c
+                                            break
+                                    if _price_col is None:
+                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
+                                        _price_col = num_cols[0] if num_cols else None
+                                    if _price_col is not None:
+                                        st.line_chart(_df[_price_col])
+                                    else:
+                                        st.info('주가 변동 데이터를 표시할 수 없어요(가격 컬럼 없음).')
+                                except Exception:
+                                    st.info('주가 변동 그래프를 표시하지 못했어요(데이터 형식 확인 필요).')
     # -------------------------------------------------
     st.markdown("### 🧾 투자 상품 관리 장부")
     
