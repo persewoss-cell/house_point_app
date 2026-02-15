@@ -1435,7 +1435,40 @@ def _render_price_history_table_and_chart(product: dict):
         st.info("주가 변동 데이터가 없어요.")
         return
 
-    hist = _get_history(pid, limit=120)
+    # ✅ (PATCH) _get_history가 다른 스코프에 있어 NameError가 나는 경우가 있어,
+    # 여기서 직접 Firestore에서 주가 변동 히스토리를 로드합니다.
+    hist = []
+    try:
+        q = (
+            db.collection("invest_price_history")
+            .where(filter=FieldFilter("product_id", "==", str(pid)))
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(120)
+            .stream()
+        )
+        for d in q:
+            x = d.to_dict() or {}
+            hist.append({**x, "_doc_id": d.id})
+    except Exception:
+        # 인덱스/정렬 실패 대비: 정렬 없이 가져와서 파이썬에서 정렬
+        try:
+            q = (
+                db.collection("invest_price_history")
+                .where(filter=FieldFilter("product_id", "==", str(pid)))
+                .limit(120)
+                .stream()
+            )
+            for d in q:
+                x = d.to_dict() or {}
+                hist.append({**x, "_doc_id": d.id})
+        except Exception:
+            hist = []
+    # 최신 → 과거 순으로 정렬(가능할 때)
+    try:
+        hist.sort(key=lambda x: float(x.get("created_at", 0) or 0), reverse=True)
+    except Exception:
+        pass
+
     if not hist:
         st.info("주가 변동 데이터가 아직 없어요.")
         return
@@ -4267,6 +4300,11 @@ if st.session_state.admin_ok:
             savings = sres.get("savings", []) if sres.get("ok") else []
             sv_total = savings_active_total(savings)
             bal_now = int(a.get("balance", 0) or 0)
+
+            # ✅ (PATCH) 개별 사용자 요약표에 필요한 직업/투자값 계산(NameError 방지)
+            _role = _get_role_name_by_student_id(sid) if sid else "없음"
+            _inv_pr, _inv_val = _calc_invest_principal_and_value(sid) if sid else (0, 0)
+
             asset_total = bal_now + sv_total
 
             with st.expander(f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total}", expanded=False):
