@@ -1885,6 +1885,165 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                                                         else:
                                                             # ✅ Altair 없으면 fallback
                                                             st.line_chart(pts_df.set_index("idx")["price"])
+            else:
+                with st.expander(f"{nm} 주가 변동 반영", expanded=False):
+                    # 변동 내역(표)
+                    hist = _get_history(p["product_id"], limit=120)
+                    if hist:
+                        rows = []
+                        for h in hist:
+                            dt = _ts_to_dt(h.get("created_at"))
+                            pb = float(h.get("price_before", 0.0) or 0.0)
+                            pa = float(h.get("price_after", 0.0) or 0.0)
+                            diff = round(pa - pb, 1)
+    
+                            # 변동일시: 0월 0일(요일) 오전/오후 00시 00분
+                            def _fmt_kor_datetime(dt_obj):
+                                if not dt_obj:
+                                    return "-"
+                                try:
+                                    dt_kst = dt_obj.astimezone(KST)
+                                except Exception:
+                                    dt_kst = dt_obj
+    
+                                hour = dt_kst.hour
+                                ampm = "오전" if hour < 12 else "오후"
+                                hh = hour if 1 <= hour <= 12 else (hour - 12 if hour > 12 else 12)
+                                return f"{dt_kst.month}월 {dt_kst.day}일({days_ko[dt_kst.weekday()]}) {ampm} {hh:02d}시 {dt_kst.minute:02d}분"
+    
+                            # 주가 등락 표시 (요청: 하락은 파란 아이콘+파란 글씨)
+                            if diff > 0:
+                                diff_view = f"<span style='color:red'>▲ +{diff:.1f}</span>"
+                            elif diff < 0:
+                                diff_view = f"<span style='color:blue'>▼ {diff:.1f}</span>"
+                            else:
+                                diff_view = "-"
+    
+                            rows.append(
+                                {
+                                    "변동일시": _fmt_kor_datetime(dt),
+                                    "변동사유": h.get("reason", "") or "",
+                                    "주가": f"{pa:.1f}",          # ✅ '변동 후' → '주가'
+                                    "주가 등락": diff_view,
+                                }
+                            )
+    
+                        df = pd.DataFrame(rows)
+    
+                        # ✅ 표(왼쪽) + 꺾은선 그래프(오른쪽)
+                        left, right = st.columns([1.7,2.2], gap="large")
+    
+                        with left:
+                            st.markdown(
+                                df.to_html(escape=False, index=False, classes="inv_hist_table"),
+                                unsafe_allow_html=True,
+                            )
+    
+                        with right:
+                                                    # ✅ 꺾은선 그래프(시작→변동 순서)
+                                                    pts = []
+
+                                                    # 시작주가(초기)
+                                                    init_price = None
+                                                    if hist:
+                                                        oldest = hist[-1]  # hist는 최신순이라 마지막이 가장 오래됨
+                                                        init_price = float(oldest.get("price_before", 0.0) or 0.0)
+                                                    if init_price is None:
+                                                        init_price = float(p.get("current_price", 0.0) or 0.0)
+
+                                                    pts.append({"idx": 0, "label": "시작주가", "price": round(init_price, 1)})
+
+                                                    # 이후 변동(오래된 → 최신)
+                                                    _i = 1
+                                                    for h2 in reversed(hist):
+                                                        reason2 = str(h2.get("reason", "") or "").strip() or "-"
+                                                        pa2 = float(h2.get("price_after", 0.0) or 0.0)
+                                                        pts.append({"idx": _i, "label": reason2, "price": round(pa2, 1)})
+                                                        _i += 1
+
+                                                    pts_df = pd.DataFrame(pts)
+
+                                                    if pts_df.empty or (len(pts_df) < 2):
+                                                        st.info("주가 변동 데이터가 아직 없어요.")
+                                                    else:
+                                                        # ✅ 구간별 상승/하락/보합(색상용)
+                                                        seg_long = []
+                                                        for i in range(len(pts) - 1):
+                                                            p1 = float(pts[i]["price"])
+                                                            p2 = float(pts[i + 1]["price"])
+                                                            if p2 > p1:
+                                                                d = "up"
+                                                            elif p2 < p1:
+                                                                d = "down"
+                                                            else:
+                                                                d = "same"
+
+                                                            seg_long.append({"segment_id": i, "idx": i, "price": p1, "dir": d})
+                                                            seg_long.append({"segment_id": i, "idx": i + 1, "price": p2, "dir": d})
+
+                                                        seg_df = pd.DataFrame(seg_long)
+
+                                                                                                                # ✅ Altair가 있으면: 빨강/파랑/검정 + 회색 점
+                                                        if alt is not None:
+                                                            try:
+                                                                # ✅ (PATCH) x축은 '시작주가/변동사유' 라벨을 보여주고, y축은 50~100 고정
+                                                                #    (Altair에서만 정확히 반영. 실패/미설치 시 line_chart로 fallback)
+                                                                _lbl_map = pts_df[["idx", "label"]].copy()
+                                                                if "label" not in seg_df.columns:
+                                                                    seg_df = seg_df.merge(_lbl_map, on="idx", how="left")
+                                                                else:
+                                                                    # 혹시 기존 label이 있어도 최신 매핑으로 덮어쓰기
+                                                                    seg_df = seg_df.drop(columns=["label"], errors="ignore").merge(_lbl_map, on="idx", how="left")
+                                                                seg_df["label"] = seg_df["label"].fillna("-")
+
+                                                                color_scale = alt.Scale(
+                                                                    domain=["up", "down", "same"],
+                                                                    range=["red", "blue", "black"],
+                                                                )
+
+                                                                x_enc = alt.X(
+                                                                    "label:N",
+                                                                    sort=alt.SortField("idx", order="ascending"),
+                                                                    axis=alt.Axis(title=None, labelAngle=0),
+                                                                )
+                                                                y_enc = alt.Y(
+                                                                    "price:Q",
+                                                                    scale=alt.Scale(domain=[50, 100]),
+                                                                    axis=alt.Axis(title=None, values=list(range(50, 101, 10))),
+                                                                )
+
+                                                                base_line = (
+                                                                    alt.Chart(seg_df)
+                                                                    .mark_line()
+                                                                    .encode(
+                                                                        x=x_enc,
+                                                                        y=y_enc,
+                                                                        color=alt.Color("dir:N", scale=color_scale, legend=None),
+                                                                        detail="segment_id:N",
+                                                                    )
+                                                                )
+
+                                                                pts_layer = (
+                                                                    alt.Chart(pts_df)
+                                                                    .mark_point(filled=True, color="gray", size=70)
+                                                                    .encode(
+                                                                        x=x_enc,
+                                                                        y=y_enc,
+                                                                        tooltip=[
+                                                                            alt.Tooltip("label:N", title="변동사유"),
+                                                                            alt.Tooltip("price:Q", title="주가"),
+                                                                        ],
+                                                                    )
+                                                                )
+
+                                                                chart = (base_line + pts_layer).properties(height=260)
+                                                                st.altair_chart(chart, use_container_width=True)
+                                                            except Exception:
+                                                                # ✅ Altair 실패 시 fallback
+                                                                st.line_chart(pts_df.set_index("idx")["price"])
+                                                        else:
+                                                            # ✅ Altair 없으면 fallback
+                                                            st.line_chart(pts_df.set_index("idx")["price"])
 # -------------------------------------------------
     st.markdown("### 🧾 투자 상품 관리 장부")
     
@@ -1895,7 +2054,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
         redeemed = bool(x.get("redeemed", False))
         view_rows.append(
             {
-                "번호": int(x.get("no", 0) or 0),
+                "_no": int(x.get("no", 0) or 0),
                 "이름": str(x.get("name", "") or ""),
                 "종목": str(x.get("product_name", "") or ""),
                 "매입일자": str(x.get("buy_date_label", "") or ""),
@@ -1916,7 +2075,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
         )
     
     if view_rows:
-        st.dataframe(pd.DataFrame(view_rows).drop(columns=["_doc_id","_student_id","_product_id","_buy_price","_invest_amount"], errors="ignore"),
+        st.dataframe(pd.DataFrame(view_rows).drop(columns=["_no","_doc_id","_student_id","_product_id","_buy_price","_invest_amount"], errors="ignore"),
                      use_container_width=True, hide_index=True)
     else:
         st.caption("투자 내역이 없습니다.")
@@ -1948,9 +2107,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     
                 diff, profit, redeem_amt = _calc_redeem_amount(invest_amt, buy_price, cur_price)
     
-                c1, c2, c3, c4 = st.columns([1.2, 2.2, 2.8, 1.2], gap="small")
-                with c1:
-                    st.markdown(f"**{x.get('번호','')}**")
+                c2, c3, c4 = st.columns([2.2, 2.8, 1.2], gap="small")
                 with c2:
                     st.markdown(f"{x.get('이름','')}")
                     st.caption(prod_name)
@@ -3131,7 +3288,7 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
     now_ratio = clamp01((now_amount / goal_amount) if goal_amount > 0 else 0)
     exp_ratio = clamp01((expected_amount / goal_amount) if goal_amount > 0 else 0)
 
-    st.write(f"총 자산 기준: **{now_ratio*100:.1f}%** (현재 {current_balance} / 목표 {goal_amount})")
+    st.write(f"총 자산 기준: **{now_ratio*100:.1f}%** (현재 {now_amount} / 목표 {goal_amount})")
     st.progress(exp_ratio)
     st.write(f"총 자산 기준 예상 달성률: **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
 
@@ -3139,6 +3296,8 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
         st.info(f"📌 진행 중 적금 원금 **+{principal_all_active}** 포함 (목표일 이후 만기 적금은 원금만 반영)")
     if interest_before_goal > 0:
         st.caption(f"※ 목표일({goal_date.isoformat()}) 이전 만기 적금 이자 **+{interest_before_goal}** 포함")
+    if int(inv_now) > 0:
+        st.caption(f"※ 투자 현재 평가금 **+{int(inv_now)}** 포함")
     if principal_all_active == 0 and interest_before_goal == 0:
         st.caption("진행 중 적금이 없어 예상 금액은 현재 잔액과 같아요.")
 
@@ -3182,7 +3341,9 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
                 if m_date <= goal_date:
                     interest_before_goal += interest3
 
-    expected_amount = int(balance_now) + int(principal_all_active) + int(interest_before_goal)
+    inv_now = _get_invest_summary_by_student_id(str(student_id or ""))[1]
+
+    expected_amount = int(balance_now) + int(principal_all_active) + int(interest_before_goal) + int(inv_now)
     exp_ratio = clamp01(expected_amount / goal_amount if goal_amount > 0 else 0)
 
     st.write(f"- 목표 금액: **{goal_amount}**")
@@ -4095,7 +4256,6 @@ if st.session_state.admin_ok:
             # ✅ (class앱 기준) 직업/투자 현재평가 표시
             _role = _get_role_name_by_student_id(str(sid))
             _inv_text, _inv_total = _get_invest_summary_by_student_id(str(sid))
-            st.caption(f"직업: {_role} · 투자(현재평가): {int(_inv_total)} 포인트")
 
             txr = api_get_txs_by_student_id(sid, limit=300)
             df_tx = pd.DataFrame(txr.get("rows", [])) if txr.get("ok") else pd.DataFrame()
@@ -4107,6 +4267,13 @@ if st.session_state.admin_ok:
 
             st.subheader(f"👤 {nm}")
             render_asset_summary(bal_now, savings)
+
+            # ✅ (PATCH) 직업/투자 정보를 '총자산/통장/적금' 다음 줄에 표시
+            _inv_principal_text, _inv_principal_total = _get_invest_principal_by_student_id(str(sid))
+            r2 = st.columns(3)
+            r2[0].metric("직업", _role if _role else "없음")
+            r2[1].metric("투자 원금", f"{int(_inv_principal_total)}")
+            r2[2].metric("현재 평가금", f"{int(_inv_total)}")
 
             st.markdown("### 📒 통장내역")
             if not df_tx.empty:
@@ -4189,7 +4356,7 @@ st.markdown(f"#### 적금 금액: **{sv_total} 포인트**")
 st.markdown(f"#### 투자 금액(현재 평가금): **{int(inv_total)} 포인트**")
 st.markdown(f"#### 직업: **{role_name}**")
 
-sub1, sub2, sub_invest, sub_job, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "💼 직업", "🎯 목표"])
+sub1, sub2, sub_invest, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표"])
 
 # =========================
 # 거래 탭
@@ -4365,13 +4532,6 @@ with sub_invest:
         login_name=name,
         login_pin=pin,
     )
-
-# =========================
-# 직업 탭
-# =========================
-with sub_job:
-    st.subheader("💼 직업")
-    st.write(f"현재 직업: **{role_name}**")
 
 
 # =========================
