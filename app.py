@@ -1,5 +1,12 @@
 import streamlit as st
 import pandas as pd
+
+# ✅ Altair (차트) - 설치되어 있지 않아도 앱이 죽지 않게 안전 처리
+try:
+    import altair as alt
+except Exception:
+    alt = None
+
 from datetime import datetime, timezone, timedelta, date
 
 import firebase_admin
@@ -15,29 +22,6 @@ st.set_page_config(page_title=APP_TITLE, layout="wide")
 KST = timezone(timedelta(hours=9))
 ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
-
-# =========================
-# Session State Defaults (중요: AttributeError 방지)
-# =========================
-_DEFAULT_SESSION_STATE = {
-    "logged_in": False,
-    "login_name": "",
-    "login_pin": "",
-    "admin_ok": False,
-    "delete_confirm": False,
-    "undo_mode": False,
-    "data": {},
-    "last_maturity_check": None,
-    # 템플릿 정렬/모바일 UI 관련 상태
-    "tpl_mobile_sort_ui": False,
-    "tpl_sort_panel_open": False,
-    "tpl_sort_mode": "name",
-    "tpl_work_ids": [],
-}
-for _k, _v in _DEFAULT_SESSION_STATE.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
-del _k, _v
 
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
@@ -1868,22 +1852,51 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
 
 
     
-                                seg_chart = alt.Chart(seg_df).mark_rule(strokeWidth=3).encode(
+                                        # ✅ (PATCH) 주가 변동 그래프: altair가 없으면 Streamlit 기본 차트로 대체
+        if alt is not None:
+        seg_chart = alt.Chart(seg_df).mark_rule(strokeWidth=3).encode(
 
     
-                                    x=alt.X(
+                                            x=alt.X(
 
     
-                                        "변동사유:N",
+                                                "변동사유:N",
 
     
-                                        sort=order,
+                                                sort=order,
 
     
-                                        title=None,
+                                                title=None,
 
     
-                                        axis=alt.Axis(labelAngle=0),
+                                                axis=alt.Axis(labelAngle=0)
+            st.altair_chart(seg_chart, use_container_width=True)
+        else:
+            try:
+                # seg_df에 time/date 컬럼이 있으면 인덱스로 설정
+                _df = seg_df.copy()
+                for _c in ['date','time','created_at','ts']:
+                    if _c in _df.columns:
+                        _df[_c] = pd.to_datetime(_df[_c], errors='coerce')
+                        _df = _df.sort_values(_c).set_index(_c)
+                        break
+                # 가격 컬럼 추정
+                _price_col = None
+                for _c in ['price','current_price','value','close']:
+                    if _c in _df.columns:
+                        _price_col = _c
+                        break
+                if _price_col is None:
+                    # 숫자 컬럼 중 첫 번째 사용
+                    num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
+                    _price_col = num_cols[0] if num_cols else None
+                if _price_col is not None:
+                    st.line_chart(_df[_price_col])
+                else:
+                    st.info('주가 변동 데이터를 표시할 수 없어요(가격 컬럼 없음).')
+            except Exception:
+                st.info('주가 변동 그래프는 altair 설치 시 표시됩니다.')
+,
 
     
                                     ),
