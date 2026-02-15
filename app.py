@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 from datetime import datetime, timezone, timedelta, date
 
 import firebase_admin
@@ -1845,41 +1846,10 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
 
 
     
-                                # ✅ (PATCH) 주가 변동 그래프(Altair 제거) :
-                                # - 상승(빨강) / 하락(파랑) / 보합(검정) 꺾은선
-                                # - 변동 지점은 회색 점
-                                try:
-                                    import matplotlib.pyplot as plt
-                                    _labels = list(chart_df['변동사유'].tolist())
-                                    _prices = [float(x) for x in chart_df['변동 후'].tolist()]
-                                    _xs = list(range(len(_prices)))
-                                    fig, ax = plt.subplots(figsize=(9.0, 4.0))
-                                    # 구간별 색상
-                                    for _i in range(len(_prices)-1):
-                                        y1, y2 = _prices[_i], _prices[_i+1]
-                                        if y2 > y1:
-                                            col = 'red'
-                                        elif y2 < y1:
-                                            col = 'blue'
-                                        else:
-                                            col = 'black'
-                                        ax.plot([_xs[_i], _xs[_i+1]], [y1, y2], color=col, linewidth=2.5)
-                                    # 변동 지점(회색 점) - 시작점 제외
-                                    if len(_prices) >= 2:
-                                        ax.scatter(_xs[1:], _prices[1:], color='gray', s=30, zorder=3)
-                                    ax.grid(True, alpha=0.25)
-                                    ax.set_ylim(bottom=0)
-                                    # 라벨이 많으면 겹침 방지(처음/중간/마지막만 표시)
-                                    if len(_labels) <= 8:
-                                        ax.set_xticks(_xs)
-                                        ax.set_xticklabels(_labels, rotation=0, ha='center')
-                                    else:
-                                        keep = sorted(set([0, len(_labels)//2, len(_labels)-1]))
-                                        ax.set_xticks([_xs[k] for k in keep])
-                                        ax.set_xticklabels([_labels[k] for k in keep], rotation=0, ha='center')
-                                    st.pyplot(fig, use_container_width=True)
-                                except Exception:
-                                    st.info('주가 변동 그래프를 표시하지 못했어요(그래프 데이터 확인 필요).')
+
+    
+
+    
                             else:
                                 st.caption("그래프 데이터가 없습니다.")
     
@@ -2032,120 +2002,51 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                                         return "down"
                                     return "same"
                                 seg_df["direction_seg"] = seg_df.apply(_seg_dir, axis=1)
+                                # ✅ (PATCH) 주가 변동 그래프 (Matplotlib: 상승=빨강, 하락=파랑, 보합=검정 / 변동지점=회색 점)
+                                try:
+                                    _df = (seg_df if 'seg_df' in locals() else chart_df).copy()
+                                    _tcol = None
+                                    for _c in ['변동일시','date','time','created_at','ts','timestamp']:
+                                        if _c in _df.columns:
+                                            _tcol = _c
+                                            break
+                                    if _tcol and _tcol != '변동일시':
+                                        _df[_tcol] = pd.to_datetime(_df[_tcol], errors='coerce')
+                                        _df = _df.dropna(subset=[_tcol]).sort_values(_tcol)
+                                        x = _df[_tcol].tolist()
+                                    else:
+                                        x = list(range(len(_df)))
+                                    _pcol = None
+                                    for _c in ['변동 후','price','current_price','value','close','y']:
+                                        if _c in _df.columns:
+                                            _pcol = _c
+                                            break
+                                    if _pcol is None:
+                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
+                                        _pcol = num_cols[0] if num_cols else None
+                                    if _pcol is None or len(_df) == 0:
+                                        st.info('주가 변동 그래프를 표시할 데이터가 없어요.')
+                                    else:
+                                        y = [float(v) for v in _df[_pcol].tolist()]
+                                        fig = plt.figure()
+                                        ax = fig.add_subplot(111)
+                                        for i2 in range(1, len(y)):
+                                            dy = y[i2] - y[i2-1]
+                                            c = 'red' if dy > 0 else ('blue' if dy < 0 else 'black')
+                                            ax.plot([x[i2-1], x[i2]], [y[i2-1], y[i2]], color=c)
+                                        if len(y) >= 2:
+                                            ax.scatter(x[1:], y[1:], color='gray', s=18)
+                                        ax.grid(True, alpha=0.2)
+                                        st.pyplot(fig, clear_figure=True, use_container_width=True)
+                                except Exception:
+                                    st.info('주가 변동 그래프를 표시하지 못했어요(그래프 데이터 확인 필요).')
 
 
     
-                                # (PATCH) Altair 미사용: seg_chart = alt.Chart(seg_df).mark_rule(strokeWidth=3).encode(
 
     
-                                    x=alt.X(
 
     
-                                        "변동사유:N",
-
-    
-                                        sort=order,
-
-    
-                                        title=None,
-
-    
-                                        axis=alt.Axis(labelAngle=0),
-
-    
-                                    ),
-
-    
-                                    x2="x2:N",
-
-    
-                                    y=alt.Y(
-
-    
-                                        "변동 후:Q",
-
-    
-                                        title=None,
-
-    
-                                        scale=alt.Scale(domain=[50, 100]),
-
-    
-                                    ),
-
-    
-                                    y2="y2:Q",
-
-    
-                                    color=alt.Color(
-
-    
-                                        "direction_seg:N",
-
-    
-                                        scale=alt.Scale(domain=["up", "down", "same"], range=["red", "blue", "black"]),
-
-    
-                                        legend=None,
-
-    
-                                    ),
-
-    
-                                    tooltip=["변동사유", "변동 후"],
-
-    
-                                )
-
-
-    
-                                # (PATCH) Altair 미사용: pt_chart = alt.Chart(chart_df).mark_point(size=55, color="gray").encode(
-
-    
-                                    x=alt.X(
-
-    
-                                        "변동사유:N",
-
-    
-                                        sort=order,
-
-    
-                                        title=None,
-
-    
-                                        axis=alt.Axis(labelAngle=0),
-
-    
-                                    ),
-
-    
-                                    y=alt.Y(
-
-    
-                                        "변동 후:Q",
-
-    
-                                        title=None,
-
-    
-                                        scale=alt.Scale(domain=[50, 100]),
-
-    
-                                    ),
-
-    
-                                    tooltip=["변동사유", "변동 후"],
-
-    
-                                )
-
-
-    
-                                chart = (seg_chart + pt_chart).properties(height=260)
-
-    
-                                # (PATCH) Altair 미사용: st.altair_chart(chart, use_container_width=True)
                             else:
                                 st.caption("그래프 데이터가 없습니다.")
     
@@ -3024,14 +2925,6 @@ def _render_jobs_admin_like():
 
     if status_rows:
         df_status = pd.DataFrame(status_rows)
-        # ✅ (PATCH) 집 버전: 번호 컬럼 숨김
-        try:
-            if '번호' in df.columns:
-                df = df.drop(columns=['번호'])
-            if 'no' in df.columns:
-                df = df.drop(columns=['no'])
-        except Exception:
-            pass
         try:
             df_status["번호_정렬"] = pd.to_numeric(df_status["번호"], errors="coerce").fillna(999999).astype(int)
             df_status = df_status.sort_values(["번호_정렬", "이름", "직업"], kind="mergesort").drop(columns=["번호_정렬"])
