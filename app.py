@@ -1810,20 +1810,41 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
 
                                                         seg_df = pd.DataFrame(seg_long)
 
-                                                        # ✅ Altair가 있으면: 빨강/파랑/검정 + 회색 점
+                                                                                                                # ✅ Altair가 있으면: 빨강/파랑/검정 + 회색 점
                                                         if alt is not None:
                                                             try:
+                                                                # ✅ (PATCH) x축은 '시작주가/변동사유' 라벨을 보여주고, y축은 50~100 고정
+                                                                #    (Altair에서만 정확히 반영. 실패/미설치 시 line_chart로 fallback)
+                                                                _lbl_map = pts_df[["idx", "label"]].copy()
+                                                                if "label" not in seg_df.columns:
+                                                                    seg_df = seg_df.merge(_lbl_map, on="idx", how="left")
+                                                                else:
+                                                                    # 혹시 기존 label이 있어도 최신 매핑으로 덮어쓰기
+                                                                    seg_df = seg_df.drop(columns=["label"], errors="ignore").merge(_lbl_map, on="idx", how="left")
+                                                                seg_df["label"] = seg_df["label"].fillna("-")
+
                                                                 color_scale = alt.Scale(
                                                                     domain=["up", "down", "same"],
                                                                     range=["red", "blue", "black"],
+                                                                )
+
+                                                                x_enc = alt.X(
+                                                                    "label:N",
+                                                                    sort=alt.SortField("idx", order="ascending"),
+                                                                    axis=alt.Axis(title=None, labelAngle=0),
+                                                                )
+                                                                y_enc = alt.Y(
+                                                                    "price:Q",
+                                                                    scale=alt.Scale(domain=[50, 100]),
+                                                                    axis=alt.Axis(title=None, values=list(range(50, 101, 10))),
                                                                 )
 
                                                                 base_line = (
                                                                     alt.Chart(seg_df)
                                                                     .mark_line()
                                                                     .encode(
-                                                                        x=alt.X("idx:Q", axis=alt.Axis(title=None, labels=False, ticks=False)),
-                                                                        y=alt.Y("price:Q", axis=alt.Axis(title=None)),
+                                                                        x=x_enc,
+                                                                        y=y_enc,
                                                                         color=alt.Color("dir:N", scale=color_scale, legend=None),
                                                                         detail="segment_id:N",
                                                                     )
@@ -1831,10 +1852,10 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
 
                                                                 pts_layer = (
                                                                     alt.Chart(pts_df)
-                                                                    .mark_point(filled=True, color="gray", size=60)
+                                                                    .mark_point(filled=True, color="gray", size=70)
                                                                     .encode(
-                                                                        x=alt.X("idx:Q", axis=alt.Axis(title=None, labels=False, ticks=False)),
-                                                                        y=alt.Y("price:Q", axis=alt.Axis(title=None)),
+                                                                        x=x_enc,
+                                                                        y=y_enc,
                                                                         tooltip=[
                                                                             alt.Tooltip("label:N", title="변동사유"),
                                                                             alt.Tooltip("price:Q", title="주가"),
@@ -1850,7 +1871,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                                                         else:
                                                             # ✅ Altair 없으면 fallback
                                                             st.line_chart(pts_df.set_index("idx")["price"])
-    # -------------------------------------------------
+# -------------------------------------------------
     st.markdown("### 🧾 투자 상품 관리 장부")
     
     ledger_rows = _load_ledger(None if is_admin else my_student_id)
@@ -2697,58 +2718,38 @@ def _render_jobs_admin_like():
                 st.error(f"전체 직업 해제 실패: {e}")
 
     st.divider()
-
     # -------------------------------------------------
     # ✅ 직업 현황(학생 기준 표) — 배정된 학생만 표시
     # -------------------------------------------------
     st.markdown("### 📋 직업/월급 목록")
+
     status_rows = []
-    id_to_no_name = {r["student_id"]: (r["no"], r["name"]) for r in acc_rows}
+    id_to_no_name = {r["student_id"]: (r.get("no", ""), r.get("name", "")) for r in acc_rows}
 
     for r in rows:
-        job = r["job"]
-        salary = int(r["salary"])
+        job = str(r.get("job", "") or "")
+        salary = int(r.get("salary", 0) or 0)
         net = int(_calc_net(salary, cfg) or 0)
+
         for sid in (r.get("assigned_ids", []) or []):
             sid = str(sid).strip()
             if not sid:
                 continue
-            no, nm = id_to_no_name.get(sid, (999999, ""))
-            status_rows.append({"번호": int(no) if str(no).isdigit() else no, "이름": nm, "직업": job, "월급": salary, "실수령액": net})
+            _no, nm = id_to_no_name.get(sid, ("", ""))
+            if nm:
+                # ✅ 집(가정)용: 번호 컬럼은 아예 만들지 않음
+                status_rows.append({"이름": nm, "직업": job, "월급": salary, "실수령액": net})
 
-        if status_rows:
-            df_status = pd.DataFrame(status_rows)
-
-            # ✅ (PATCH) 집/번호 없는 환경: '번호' 컬럼을 숨김
-            show_no = False
-            try:
-                _num = pd.to_numeric(df_status["번호"], errors="coerce")
-                # 999999(미지정) 같은 값만 있으면 번호 없음으로 판단
-                show_no = bool((_num.notna() & (_num < 999999)).any())
-            except Exception:
-                show_no = False
-
-            if show_no:
-                try:
-                    df_status["번호_정렬"] = pd.to_numeric(df_status["번호"], errors="coerce").fillna(999999).astype(int)
-                    df_status = df_status.sort_values(["번호_정렬", "이름", "직업"], kind="mergesort").drop(columns=["번호_정렬"])
-                except Exception:
-                    df_status = df_status.sort_values(["번호", "이름", "직업"], kind="mergesort")
-
-                st.dataframe(
-                    df_status[["번호", "이름", "직업", "월급", "실수령액"]],
-                    use_container_width=True,
-                    hide_index=True,
-                )
-            else:
-                df_status = df_status.sort_values(["이름", "직업"], kind="mergesort")
-                st.dataframe(
-                    df_status[["이름", "직업", "월급", "실수령액"]],
-                    use_container_width=True,
-                    hide_index=True,
-                )
+    if status_rows:
+        df_status = pd.DataFrame(status_rows).sort_values(["이름", "직업"], kind="mergesort")
+        st.dataframe(
+            df_status[["이름", "직업", "월급", "실수령액"]],
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
         st.info("아직 직업이 배정된 학생이 없습니다.")
+
 
     st.divider()
 
