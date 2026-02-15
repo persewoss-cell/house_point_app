@@ -1742,7 +1742,6 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                             def _fmt_kor_datetime(dt_obj):
                                 if not dt_obj:
                                     return "-"
-                                days_ko = ["월", "화", "수", "목", "금", "토", "일"]
                                 try:
                                     dt_kst = dt_obj.astimezone(KST)
                                 except Exception:
