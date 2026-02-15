@@ -3477,18 +3477,34 @@ def _render_jobs_admin_like():
         columns=["순", "직업", "월급", "학생 수"],
     )
     bio = io.BytesIO()
-    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        sample_df.to_excel(writer, index=False, sheet_name="jobs")
-    bio.seek(0)
+    # ✅ 샘플 파일 다운로드 (openpyxl 없으면 CSV로 대체)
+    import io
+    try:
+        import openpyxl  # type: ignore  # noqa: F401
+        bio = io.BytesIO()
+        with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+            sample_df.to_excel(writer, index=False, sheet_name="jobs")
+        bio.seek(0)
 
-    st.download_button(
-        "📄 직업 샘플 엑셀 다운로드",
-        data=bio.getvalue(),
-        file_name="jobs_sample.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        key="job_sample_down",
-    )
+        st.download_button(
+            "📄 직업 샘플 엑셀 다운로드",
+            data=bio.getvalue(),
+            file_name="jobs_sample.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="job_sample_down",
+        )
+    except Exception:
+        csv_bytes = sample_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "📄 직업 샘플 CSV 다운로드",
+            data=csv_bytes,
+            file_name="jobs_sample.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="job_sample_down_csv",
+        )
+        st.info("서버에 openpyxl이 없어 엑셀(xlsx) 대신 CSV로 제공합니다. (원하면 requirements.txt에 openpyxl을 추가하세요.)")
 
     # ✅ 기존 목록 삭제 여부(저장 시 적용)
     wipe_before = st.checkbox("⚠️ 저장 시 기존 직업 목록 전체 삭제(덮어쓰기)", value=False, key="job_wipe_before")
