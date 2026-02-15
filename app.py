@@ -1,5 +1,12 @@
 import streamlit as st
 import pandas as pd
+
+# ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
+try:
+    import altair as alt
+except Exception:
+    alt = None
+
 from datetime import datetime, timezone, timedelta, date
 
 import firebase_admin
@@ -1742,165 +1749,6 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                         df = pd.DataFrame(rows)
     
                         # ✅ 표(왼쪽) + 꺾은선 그래프(오른쪽)
-                        left, right = st.columns([1.7, 2.2], gap="large")
-    
-                        with left:
-                            st.markdown(
-                                df.to_html(escape=False, index=False, classes="inv_hist_table"),
-                                unsafe_allow_html=True,
-                            )
-    
-                        with right:
-                            # 가로: 변동사유 / 세로: 변동 후(주가)
-                            chart_rows = []
-    
-                            # ✅ 초기주가 1점 추가
-                            # - 변동 기록이 있으면: 가장 오래된 기록의 price_before가 '초기주가'
-                            # - 변동 기록이 없으면: 현재주가를 초기로 표시
-                            init_price = None
-                            if hist:
-                                oldest = hist[-1]  # hist는 최신순이라 마지막이 가장 오래됨
-                                init_price = float(oldest.get("price_before", 0.0) or 0.0)
-                            if init_price is None:
-                                init_price = float(p.get("current_price", 0.0) or 0.0)
-    
-                            chart_rows.append({"변동사유": "시작주가", "변동 후": round(init_price, 1)})
-    
-                            # ✅ 이후 변동(오래된→최신)
-                            for h2 in reversed(hist):
-                                reason2 = str(h2.get("reason", "") or "").strip() or "-"
-                                pa2 = float(h2.get("price_after", 0.0) or 0.0)
-                                chart_rows.append({"변동사유": reason2, "변동 후": round(pa2, 1)})
-    
-                            cdf = pd.DataFrame(chart_rows)
-    
-                            if not cdf.empty:
-                                order = cdf["변동사유"].tolist()
-    
-                                chart_df = cdf.copy().reset_index(drop=True)
-
-
-    
-                                # ✅ (PATCH) 구간별 상승/하락/보합 색상 + 점(회색) 표시
-
-    
-                                chart_df["prev_price"] = chart_df["변동 후"].shift(1)
-
-
-    
-                                def _dir(_row):
-
-    
-                                    p = _row.get("prev_price")
-
-    
-                                    v = _row.get("변동 후")
-
-    
-                                    if pd.isna(p) or pd.isna(v):
-
-    
-                                        return "same"
-
-    
-                                    if v > p:
-
-    
-                                        return "up"
-
-    
-                                    if v < p:
-
-    
-                                        return "down"
-
-    
-                                    return "same"
-
-
-    
-                                chart_df["direction"] = chart_df.apply(_dir, axis=1)
-
-    
-                                chart_df["x2"] = chart_df["변동사유"].shift(-1)
-
-    
-                                chart_df["y2"] = chart_df["변동 후"].shift(-1)
-
-    
-                                seg_df = chart_df.dropna(subset=["x2"]).copy()
-
-                                # ✅ 구간(현재→다음) 기준으로 상승/하락/보합 판정
-                                def _seg_dir(_r):
-                                    y1 = _r.get("변동 후")
-                                    y2 = _r.get("y2")
-                                    if pd.isna(y1) or pd.isna(y2):
-                                        return "same"
-                                    if float(y2) > float(y1):
-                                        return "up"
-                                    if float(y2) < float(y1):
-                                        return "down"
-                                    return "same"
-                                seg_df["direction_seg"] = seg_df.apply(_seg_dir, axis=1)
-
-
-    
-
-    
-
-    
-                            else:
-                                st.caption("그래프 데이터가 없습니다.")
-    
-                    else:
-                        st.caption("아직 주가 변동 기록이 없습니다.")
-    
-            else:
-                with st.expander(f"{nm} 주가 변동 내역", expanded=False):
-                    # 변동 내역(표)
-                    hist = _get_history(p["product_id"], limit=120)
-                    if hist:
-                        rows = []
-                        for h in hist:
-                            dt = _ts_to_dt(h.get("created_at"))
-                            pb = float(h.get("price_before", 0.0) or 0.0)
-                            pa = float(h.get("price_after", 0.0) or 0.0)
-                            diff = round(pa - pb, 1)
-    
-                            # 변동일시: 0월 0일(요일) 오전/오후 00시 00분
-                            def _fmt_kor_datetime(dt_obj):
-                                if not dt_obj:
-                                    return "-"
-                                try:
-                                    dt_kst = dt_obj.astimezone(KST)
-                                except Exception:
-                                    dt_kst = dt_obj
-    
-                                hour = dt_kst.hour
-                                ampm = "오전" if hour < 12 else "오후"
-                                hh = hour if 1 <= hour <= 12 else (hour - 12 if hour > 12 else 12)
-                                return f"{dt_kst.month}월 {dt_kst.day}일({days_ko[dt_kst.weekday()]}) {ampm} {hh:02d}시 {dt_kst.minute:02d}분"
-    
-                            # 주가 등락 표시 (요청: 하락은 파란 아이콘+파란 글씨)
-                            if diff > 0:
-                                diff_view = f"<span style='color:red'>▲ +{diff:.1f}</span>"
-                            elif diff < 0:
-                                diff_view = f"<span style='color:blue'>▼ {diff:.1f}</span>"
-                            else:
-                                diff_view = "-"
-    
-                            rows.append(
-                                {
-                                    "변동일시": _fmt_kor_datetime(dt),
-                                    "변동사유": h.get("reason", "") or "",
-                                    "주가": f"{pa:.1f}",          # ✅ '변동 후' → '주가'
-                                    "주가 등락": diff_view,
-                                }
-                            )
-    
-                        df = pd.DataFrame(rows)
-    
-                        # ✅ 표(왼쪽) + 꺾은선 그래프(오른쪽)
                         left, right = st.columns([1.7,2.2], gap="large")
     
                         with left:
@@ -1910,207 +1758,89 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                             )
     
                         with right:
-                            # 가로: 변동사유 / 세로: 변동 후(주가)
-                            chart_rows = []
-    
-                            # ✅ 초기주가 1점 추가
-                            # - 변동 기록이 있으면: 가장 오래된 기록의 price_before가 '초기주가'
-                            # - 변동 기록이 없으면: 현재주가를 초기로 표시
-                            init_price = None
-                            if hist:
-                                oldest = hist[-1]  # hist는 최신순이라 마지막이 가장 오래됨
-                                init_price = float(oldest.get("price_before", 0.0) or 0.0)
-                            if init_price is None:
-                                init_price = float(p.get("current_price", 0.0) or 0.0)
-    
-                            chart_rows.append({"변동사유": "시작주가", "변동 후": round(init_price, 1)})
-    
-                            # ✅ 이후 변동(오래된→최신)
-                            for h2 in reversed(hist):
-                                reason2 = str(h2.get("reason", "") or "").strip() or "-"
-                                pa2 = float(h2.get("price_after", 0.0) or 0.0)
-                                chart_rows.append({"변동사유": reason2, "변동 후": round(pa2, 1)})
-    
-                            cdf = pd.DataFrame(chart_rows)
-    
-                            if not cdf.empty:
-                                order = cdf["변동사유"].tolist()
-    
-                                chart_df = cdf.copy().reset_index(drop=True)
+                                                    # ✅ 꺾은선 그래프(시작→변동 순서)
+                                                    pts = []
 
+                                                    # 시작주가(초기)
+                                                    init_price = None
+                                                    if hist:
+                                                        oldest = hist[-1]  # hist는 최신순이라 마지막이 가장 오래됨
+                                                        init_price = float(oldest.get("price_before", 0.0) or 0.0)
+                                                    if init_price is None:
+                                                        init_price = float(p.get("current_price", 0.0) or 0.0)
 
-    
-                                # ✅ (PATCH) 구간별 상승/하락/보합 색상 + 점(회색) 표시
+                                                    pts.append({"idx": 0, "label": "시작주가", "price": round(init_price, 1)})
 
-    
-                                chart_df["prev_price"] = chart_df["변동 후"].shift(1)
+                                                    # 이후 변동(오래된 → 최신)
+                                                    _i = 1
+                                                    for h2 in reversed(hist):
+                                                        reason2 = str(h2.get("reason", "") or "").strip() or "-"
+                                                        pa2 = float(h2.get("price_after", 0.0) or 0.0)
+                                                        pts.append({"idx": _i, "label": reason2, "price": round(pa2, 1)})
+                                                        _i += 1
 
+                                                    pts_df = pd.DataFrame(pts)
 
-    
-                                def _dir(_row):
+                                                    if pts_df.empty or (len(pts_df) < 2):
+                                                        st.info("주가 변동 데이터가 아직 없어요.")
+                                                    else:
+                                                        # ✅ 구간별 상승/하락/보합(색상용)
+                                                        seg_long = []
+                                                        for i in range(len(pts) - 1):
+                                                            p1 = float(pts[i]["price"])
+                                                            p2 = float(pts[i + 1]["price"])
+                                                            if p2 > p1:
+                                                                d = "up"
+                                                            elif p2 < p1:
+                                                                d = "down"
+                                                            else:
+                                                                d = "same"
 
-    
-                                    p = _row.get("prev_price")
+                                                            seg_long.append({"segment_id": i, "idx": i, "price": p1, "dir": d})
+                                                            seg_long.append({"segment_id": i, "idx": i + 1, "price": p2, "dir": d})
 
-    
-                                    v = _row.get("변동 후")
+                                                        seg_df = pd.DataFrame(seg_long)
 
-    
-                                    if pd.isna(p) or pd.isna(v):
+                                                        # ✅ Altair가 있으면: 빨강/파랑/검정 + 회색 점
+                                                        if alt is not None:
+                                                            try:
+                                                                color_scale = alt.Scale(
+                                                                    domain=["up", "down", "same"],
+                                                                    range=["red", "blue", "black"],
+                                                                )
 
-    
-                                        return "same"
+                                                                base_line = (
+                                                                    alt.Chart(seg_df)
+                                                                    .mark_line()
+                                                                    .encode(
+                                                                        x=alt.X("idx:Q", axis=alt.Axis(title=None, labels=False, ticks=False)),
+                                                                        y=alt.Y("price:Q", axis=alt.Axis(title=None)),
+                                                                        color=alt.Color("dir:N", scale=color_scale, legend=None),
+                                                                        detail="segment_id:N",
+                                                                    )
+                                                                )
 
-    
-                                    if v > p:
+                                                                pts_layer = (
+                                                                    alt.Chart(pts_df)
+                                                                    .mark_point(filled=True, color="gray", size=60)
+                                                                    .encode(
+                                                                        x=alt.X("idx:Q", axis=alt.Axis(title=None, labels=False, ticks=False)),
+                                                                        y=alt.Y("price:Q", axis=alt.Axis(title=None)),
+                                                                        tooltip=[
+                                                                            alt.Tooltip("label:N", title="변동사유"),
+                                                                            alt.Tooltip("price:Q", title="주가"),
+                                                                        ],
+                                                                    )
+                                                                )
 
-    
-                                        return "up"
-
-    
-                                    if v < p:
-
-    
-                                        return "down"
-
-    
-                                    return "same"
-
-
-    
-                                chart_df["direction"] = chart_df.apply(_dir, axis=1)
-
-    
-                                chart_df["x2"] = chart_df["변동사유"].shift(-1)
-
-    
-                                chart_df["y2"] = chart_df["변동 후"].shift(-1)
-
-    
-                                seg_df = chart_df.dropna(subset=["x2"]).copy()
-
-                                # ✅ 구간(현재→다음) 기준으로 상승/하락/보합 판정
-                                def _seg_dir(_r):
-                                    y1 = _r.get("변동 후")
-                                    y2 = _r.get("y2")
-                                    if pd.isna(y1) or pd.isna(y2):
-                                        return "same"
-                                    if float(y2) > float(y1):
-                                        return "up"
-                                    if float(y2) < float(y1):
-                                        return "down"
-                                    return "same"
-                                seg_df["direction_seg"] = seg_df.apply(_seg_dir, axis=1)
-                                # ✅ (PATCH) 주가 변동 그래프: matplotlib/altair 있으면 색상구간, 없으면 기본 꺾은선
-                                try:
-                                    _df = (seg_df if 'seg_df' in locals() else chart_df).copy()
-                                    _tcol = None
-                                    for _c in ['변동일시','date','time','created_at','ts','timestamp']:
-                                        if _c in _df.columns:
-                                            _tcol = _c
-                                            break
-                                    if _tcol and _tcol != '변동일시':
-                                        _df[_tcol] = pd.to_datetime(_df[_tcol], errors='coerce')
-                                        _df = _df.dropna(subset=[_tcol]).sort_values(_tcol)
-                                        x = _df[_tcol].tolist()
-                                    else:
-                                        x = list(range(len(_df)))
-                                
-                                    _pcol = None
-                                    for _c in ['변동 후','price','current_price','value','close','y']:
-                                        if _c in _df.columns:
-                                            _pcol = _c
-                                            break
-                                    if _pcol is None:
-                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
-                                        _pcol = num_cols[0] if num_cols else None
-                                
-                                    if _pcol is None or len(_df) == 0:
-                                        st.info('주가 변동 그래프를 표시할 데이터가 없어요.')
-                                    else:
-                                        y = [float(v) for v in _df[_pcol].tolist()]
-                                        # 1) matplotlib
-                                        try:
-                                            import matplotlib.pyplot as plt
-                                            fig = plt.figure()
-                                            ax = fig.add_subplot(111)
-                                            for i2 in range(1, len(y)):
-                                                dy = y[i2] - y[i2-1]
-                                                c = 'red' if dy > 0 else ('blue' if dy < 0 else 'black')
-                                                ax.plot([x[i2-1], x[i2]], [y[i2-1], y[i2]], color=c)
-                                            if len(y) >= 2:
-                                                ax.scatter(x[1:], y[1:], color='gray', s=18)
-                                            ax.grid(True, alpha=0.2)
-                                            st.pyplot(fig, clear_figure=True, use_container_width=True)
-                                        except Exception:
-                                            # 2) altair
-                                            try:
-                                                import altair as alt
-                                                seg_rows = []
-                                                for i2 in range(1, len(y)):
-                                                    dy = y[i2] - y[i2-1]
-                                                    direction = 'up' if dy > 0 else ('down' if dy < 0 else 'same')
-                                                    seg_rows.append({'x': x[i2-1], 'x2': x[i2], 'y': y[i2-1], 'y2': y[i2], 'direction': direction})
-                                                seg_df2 = pd.DataFrame(seg_rows)
-                                                pts_df = pd.DataFrame({'x': x[1:], 'y': y[1:]}) if len(y) >= 2 else pd.DataFrame({'x': [], 'y': []})
-                                                base = alt.Chart(seg_df2).mark_rule(strokeWidth=3).encode(
-                                                    x='x', x2='x2', y='y', y2='y2',
-                                                    color=alt.Color('direction', scale=alt.Scale(domain=['up','down','same'], range=['red','blue','black']), legend=None)
-                                                )
-                                                pts = alt.Chart(pts_df).mark_point(color='gray').encode(x='x', y='y')
-                                                st.altair_chart(base + pts, use_container_width=True)
-                                            except Exception:
-                                                st.line_chart(pd.Series(y))
-                                except Exception:
-                                    st.info('주가 변동 그래프를 표시하지 못했어요(그래프 데이터 확인 필요).')
-                                
-                                    if _tcol and _tcol != '변동일시':
-                                        _df[_tcol] = pd.to_datetime(_df[_tcol], errors='coerce')
-                                        _df = _df.dropna(subset=[_tcol]).sort_values(_tcol)
-                                        x = _df[_tcol].tolist()
-                                    else:
-                                        x = list(range(len(_df)))
-                                    _pcol = None
-                                    for _c in ['변동 후','price','current_price','value','close','y']:
-                                        if _c in _df.columns:
-                                            _pcol = _c
-                                            break
-                                    if _pcol is None:
-                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
-                                        _pcol = num_cols[0] if num_cols else None
-                                    if _pcol is None or len(_df) == 0:
-                                        st.info('주가 변동 그래프를 표시할 데이터가 없어요.')
-                                    else:
-                                        y = [float(v) for v in _df[_pcol].tolist()]
-                                        fig = plt.figure()
-                                        ax = fig.add_subplot(111)
-                                        for i2 in range(1, len(y)):
-                                            dy = y[i2] - y[i2-1]
-                                            c = 'red' if dy > 0 else ('blue' if dy < 0 else 'black')
-                                            ax.plot([x[i2-1], x[i2]], [y[i2-1], y[i2]], color=c)
-                                        if len(y) >= 2:
-                                            ax.scatter(x[1:], y[1:], color='gray', s=18)
-                                        ax.grid(True, alpha=0.2)
-                                        st.pyplot(fig, clear_figure=True, use_container_width=True)
-                                except Exception:
-                                    st.info('주가 변동 그래프를 표시하지 못했어요(그래프 데이터 확인 필요).')
-
-
-    
-
-    
-
-    
-                            else:
-                                st.caption("그래프 데이터가 없습니다.")
-    
-                    else:
-                        st.caption("아직 주가 변동 기록이 없습니다.")
-    
-    st.divider()
-    
-    # -------------------------------------------------
-    # 2) 투자 상품 관리 장부
+                                                                chart = (base_line + pts_layer).properties(height=260)
+                                                                st.altair_chart(chart, use_container_width=True)
+                                                            except Exception:
+                                                                # ✅ Altair 실패 시 fallback
+                                                                st.line_chart(pts_df.set_index("idx")["price"])
+                                                        else:
+                                                            # ✅ Altair 없으면 fallback
+                                                            st.line_chart(pts_df.set_index("idx")["price"])
     # -------------------------------------------------
     st.markdown("### 🧾 투자 상품 관리 장부")
     
@@ -2977,14 +2707,37 @@ def _render_jobs_admin_like():
             no, nm = id_to_no_name.get(sid, (999999, ""))
             status_rows.append({"번호": int(no) if str(no).isdigit() else no, "이름": nm, "직업": job, "월급": salary, "실수령액": net})
 
-    if status_rows:
-        df_status = pd.DataFrame(status_rows)
-        try:
-            df_status["번호_정렬"] = pd.to_numeric(df_status["번호"], errors="coerce").fillna(999999).astype(int)
-            df_status = df_status.sort_values(["번호_정렬", "이름", "직업"], kind="mergesort").drop(columns=["번호_정렬"])
-        except Exception:
-            df_status = df_status.sort_values(["번호", "이름", "직업"], kind="mergesort")
-        st.dataframe(df_status[["번호", "이름", "직업", "월급", "실수령액"]], use_container_width=True, hide_index=True)
+        if status_rows:
+            df_status = pd.DataFrame(status_rows)
+
+            # ✅ (PATCH) 집/번호 없는 환경: '번호' 컬럼을 숨김
+            show_no = False
+            try:
+                _num = pd.to_numeric(df_status["번호"], errors="coerce")
+                # 999999(미지정) 같은 값만 있으면 번호 없음으로 판단
+                show_no = bool((_num.notna() & (_num < 999999)).any())
+            except Exception:
+                show_no = False
+
+            if show_no:
+                try:
+                    df_status["번호_정렬"] = pd.to_numeric(df_status["번호"], errors="coerce").fillna(999999).astype(int)
+                    df_status = df_status.sort_values(["번호_정렬", "이름", "직업"], kind="mergesort").drop(columns=["번호_정렬"])
+                except Exception:
+                    df_status = df_status.sort_values(["번호", "이름", "직업"], kind="mergesort")
+
+                st.dataframe(
+                    df_status[["번호", "이름", "직업", "월급", "실수령액"]],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                df_status = df_status.sort_values(["이름", "직업"], kind="mergesort")
+                st.dataframe(
+                    df_status[["이름", "직업", "월급", "실수령액"]],
+                    use_container_width=True,
+                    hide_index=True,
+                )
     else:
         st.info("아직 직업이 배정된 학생이 없습니다.")
 
