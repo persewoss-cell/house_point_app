@@ -4360,7 +4360,6 @@ inv_pr_text_pt = str(inv_pr_text or "").replace("드림", "포인트")
 
 asset_total = balance + sv_total + int(inv_total)
 
-st.markdown(f"## 🧾 {name} 통장")
 st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
 st.markdown(f"#### 💰 통장 잔액: **{balance} 포인트**")
 st.markdown(f"#### 🏦 적금 금액: **{sv_total} 포인트**")
@@ -4556,3 +4555,4 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
