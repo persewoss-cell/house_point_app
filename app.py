@@ -34,6 +34,17 @@ if "last_maturity_check" not in st.session_state or not isinstance(st.session_st
 # ✅ (PATCH) 새 탭/새 세션에서 'delete_confirm' 키가 없어 앱이 죽는 현상 방지
 st.session_state.setdefault("delete_confirm", False)
 
+# ✅ (PATCH) 새 탭/새 세션에서 필요한 session_state 기본값(로그인/탭 UI 등) 보장
+st.session_state.setdefault("logged_in", False)
+st.session_state.setdefault("login_name", "")
+st.session_state.setdefault("login_pin", "")
+st.session_state.setdefault("admin_ok", False)
+st.session_state.setdefault("undo_mode", False)
+st.session_state.setdefault("tpl_sort_panel_open", False)
+st.session_state.setdefault("tpl_sort_mode", "기본")
+st.session_state.setdefault("tpl_mobile_sort_ui", False)
+st.session_state.setdefault("tpl_work_ids", [])
+
 
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
