@@ -4364,7 +4364,7 @@ st.markdown(f"## 🧾 {name} 통장")
 st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
 st.markdown(f"#### 💰 통장 잔액: **{balance} 포인트**")
 st.markdown(f"#### 🏦 적금 금액: **{sv_total} 포인트**")
-st.markdown(f"#### 🪙투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
+st.markdown(f"#### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
 st.markdown(f"#### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
 st.markdown(f"#### 💼 직업: **{role_name}**")
 
@@ -4556,6 +4556,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
