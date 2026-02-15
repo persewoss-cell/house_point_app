@@ -3578,9 +3578,9 @@ with st.sidebar:
 
     with c2:
         if st.button("삭제"):
-            st.session_state.delete_confirm = True
+            st.session_state["delete_confirm"] = True
 
-    if st.session_state.delete_confirm:
+    if st.session_state.get("delete_confirm", False):
         st.warning("정말로 삭제하시겠습니까?")
         y, n = st.columns(2)
         with y:
@@ -3593,7 +3593,7 @@ with st.sidebar:
                     res = api_delete_account(new_name, new_pin)
                     if res.get("ok"):
                         toast("삭제 완료!", icon="🗑️")
-                        st.session_state.delete_confirm = False
+                        st.session_state["delete_confirm"] = False
                         st.session_state.data.pop(new_name, None)
                         api_list_accounts_cached.clear()
                         st.rerun()
@@ -3601,7 +3601,7 @@ with st.sidebar:
                         st.error(res.get("error", "삭제 실패"))
         with n:
             if st.button("아니오", key="delete_no"):
-                st.session_state.delete_confirm = False
+                st.session_state["delete_confirm"] = False
                 st.rerun()
 
 
