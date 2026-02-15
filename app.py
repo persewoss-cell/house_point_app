@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone, timedelta, date
-import altair as alt
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -16,6 +15,29 @@ st.set_page_config(page_title=APP_TITLE, layout="wide")
 KST = timezone(timedelta(hours=9))
 ADMIN_PIN = "9999"
 ADMIN_NAME = "관리자"
+
+# =========================
+# Session State Defaults (중요: AttributeError 방지)
+# =========================
+_DEFAULT_SESSION_STATE = {
+    "logged_in": False,
+    "login_name": "",
+    "login_pin": "",
+    "admin_ok": False,
+    "delete_confirm": False,
+    "undo_mode": False,
+    "data": {},
+    "last_maturity_check": None,
+    # 템플릿 정렬/모바일 UI 관련 상태
+    "tpl_mobile_sort_ui": False,
+    "tpl_sort_panel_open": False,
+    "tpl_sort_mode": "name",
+    "tpl_work_ids": [],
+}
+for _k, _v in _DEFAULT_SESSION_STATE.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+del _k, _v
 
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
@@ -3578,9 +3600,9 @@ with st.sidebar:
 
     with c2:
         if st.button("삭제"):
-            st.session_state["delete_confirm"] = True
+            st.session_state.delete_confirm = True
 
-    if st.session_state.get("delete_confirm", False):
+    if st.session_state.delete_confirm:
         st.warning("정말로 삭제하시겠습니까?")
         y, n = st.columns(2)
         with y:
@@ -3593,7 +3615,7 @@ with st.sidebar:
                     res = api_delete_account(new_name, new_pin)
                     if res.get("ok"):
                         toast("삭제 완료!", icon="🗑️")
-                        st.session_state["delete_confirm"] = False
+                        st.session_state.delete_confirm = False
                         st.session_state.data.pop(new_name, None)
                         api_list_accounts_cached.clear()
                         st.rerun()
@@ -3601,7 +3623,7 @@ with st.sidebar:
                         st.error(res.get("error", "삭제 실패"))
         with n:
             if st.button("아니오", key="delete_no"):
-                st.session_state["delete_confirm"] = False
+                st.session_state.delete_confirm = False
                 st.rerun()
 
 
