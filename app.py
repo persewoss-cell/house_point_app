@@ -163,6 +163,39 @@ def init_firestore():
 
 db = init_firestore()
 
+
+# =========================
+# (PATCH) 국고(세입/세출) 기록: 직업/월급 공제에서 사용
+# - 기존 house 앱에 국고 API가 없어서 NameError가 나던 부분을 안전 처리
+# - admin_pin 검증을 따로 하지 않는 구조면, ADMIN_PIN으로만 호출되도록 제한
+# =========================
+def api_add_treasury_tx(admin_pin: str, memo: str, income: int = 0, expense: int = 0, actor: str = "salary_auto"):
+    try:
+        if str(admin_pin) != str(ADMIN_PIN):
+            return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+        memo = (memo or "").strip()
+        income = int(income or 0)
+        expense = int(expense or 0)
+        if not memo:
+            return {"ok": False, "error": "내역이 필요합니다."}
+        if (income > 0 and expense > 0) or (income == 0 and expense == 0):
+            return {"ok": False, "error": "세입/세출 중 하나만 입력하세요."}
+
+        db.collection("treasury").add(
+            {
+                "memo": memo,
+                "income": int(income),
+                "expense": int(expense),
+                "actor": actor,
+                "created_at": datetime.now(KST).isoformat(),
+            }
+        )
+        return {"ok": True}
+    except Exception as e:
+        # 국고 컬렉션이 아직 없어도 앱이 죽지 않게
+        return {"ok": False, "error": str(e)}
+
+
 # =========================
 # Utils
 # =========================
@@ -2553,8 +2586,25 @@ def _render_jobs_admin_like():
             }
         )
     acc_rows.sort(key=lambda r: (r["no"], r["name"]))
-    acc_options = ["(선택 없음)"] + [f"{r['no']} {r['name']}" for r in acc_rows]
-    label_to_id = {f"{r['no']} {r['name']}": r["student_id"] for r in acc_rows}
+
+# ✅ (PATCH) 드롭다운 라벨에서 '999999' 같은 번호를 화면에 표시하지 않음
+# - 기본은 이름만 표시
+# - 이름이 중복되면 뒤에 ·2, ·3 처럼 자동으로 구분 라벨을 붙임
+name_counts = {}
+acc_labels = []
+label_to_id = {}
+for r in acc_rows:
+    nm = str(r.get("name","") or "").strip()
+    if not nm:
+        nm = "(이름 없음)"
+    c = name_counts.get(nm, 0) + 1
+    name_counts[nm] = c
+    lab = nm if c == 1 else f"{nm} ·{c}"
+    acc_labels.append(lab)
+    label_to_id[lab] = r["student_id"]
+
+acc_options = ["(선택 없음)"] + acc_labels
+
     id_to_label = {r["student_id"]: f"{r['no']} {r['name']}" for r in acc_rows}
 
     # -------------------------------------------------
@@ -2910,7 +2960,8 @@ def _render_jobs_admin_like():
                     "order": int(x.get("order", 999999) or 999999),
                     "job": str(x.get("job", "") or ""),
                     "salary": int(x.get("salary", 0) or 0),
-                    "student_count": int(x.get("student_count", 1) or 1),
+                    "student_count": int(x.get("student_count", 0) or 0),  # 0=무제한(호환용)
+                    
                     "assigned_ids": list(x.get("assigned_ids", []) or []),
                 }
             )
@@ -2962,43 +3013,25 @@ def _render_jobs_admin_like():
                     snap = ref.get()
                     if snap.exists:
                         x = snap.to_dict() or {}
-                        cnt = max(0, int(x.get("student_count", 1) or 1))
-                        assigned = list(x.get("assigned_ids", []) or [])
+                        # ✅ (PATCH) 정원/사람수 제한 없음(무제한)
+                        assigned = [sid for sid in (x.get(\"assigned_ids\", []) or []) if sid]
+changed = False
 
-                        # 길이 정규화
-                        if cnt == 0:
-                            assigned = []
-                        else:
-                            if len(assigned) < cnt:
-                                assigned = assigned + [""] * (cnt - len(assigned))
-                            if len(assigned) > cnt:
-                                assigned = assigned[:cnt]
-
-                        changed = False
-                        full = 0
-                        for lab in sel_students_labels:
+                                                for lab in sel_students_labels:
                             sid = label_to_id.get(lab, "")
                             if not sid:
                                 continue
                             # 이미 배정되어 있으면 스킵
                             if sid in assigned:
                                 continue
-                            # 빈 자리 찾기
-                            try:
-                                k = assigned.index("")
-                            except ValueError:
-                                k = -1
-                            if k == -1:
-                                full += 1
-                                continue
-                            assigned[k] = sid
-                            changed = True
+                            # ✅ (PATCH) 무제한이므로 그냥 추가
+assigned.append(sid)
+changed = True
+
 
                         if changed:
                             ref.update({"assigned_ids": assigned})
                             toast("고용 완료!", icon="✅")
-                            if full > 0:
-                                st.warning(f"정원이 가득 차서 {full}명은 배정되지 않았어요. (학생수/정원 증가 후 다시 시도)")
                             st.rerun()
                         else:
                             st.info("변경된 내용이 없습니다. (이미 배정되었거나 정원이 가득 찼을 수 있어요.)")
@@ -3016,22 +3049,14 @@ def _render_jobs_admin_like():
                     snap = ref.get()
                     if snap.exists:
                         x = snap.to_dict() or {}
-                        cnt = max(0, int(x.get("student_count", 1) or 1))
-                        assigned = list(x.get("assigned_ids", []) or [])
+                        # ✅ (PATCH) 정원/사람수 제한 없음(무제한)
+                        assigned = [sid for sid in (x.get(\"assigned_ids\", []) or []) if sid]
 
-                        # 길이 정규화
-                        if cnt == 0:
-                            assigned = []
-                        else:
-                            if len(assigned) < cnt:
-                                assigned = assigned + [""] * (cnt - len(assigned))
-                            if len(assigned) > cnt:
-                                assigned = assigned[:cnt]
+sel_ids = [label_to_id.get(lab, "") for lab in sel_students_labels]
 
-                        sel_ids = [label_to_id.get(lab, "") for lab in sel_students_labels]
                         sel_ids = [sid for sid in sel_ids if sid]
 
-                        new_assigned = [("" if sid in sel_ids else sid) for sid in assigned]
+                        new_assigned = [sid for sid in assigned if sid not in sel_ids]
                         if new_assigned != assigned:
                             ref.update({"assigned_ids": new_assigned})
                             toast("해제 완료!", icon="✅")
@@ -3053,10 +3078,8 @@ def _render_jobs_admin_like():
                 batch = db.batch()
                 for rr in _rows2:
                     rid2 = rr["_id"]
-                    cnt2 = max(0, int(rr.get("student_count", 0) or 0))
-                    # 빈 슬롯으로 초기화(정원 유지)
-                    empty_ids = [""] * cnt2 if cnt2 > 0 else []
-                    batch.update(db.collection("job_salary").document(rid2), {"assigned_ids": empty_ids})
+                                        # ✅ (PATCH) 무제한: 배정 목록만 비움
+                    batch.update(db.collection("job_salary").document(rid2), {"assigned_ids": []})
                 batch.commit()
                 toast("전체 직업 해제 완료!", icon="✅")
                 st.rerun()
@@ -3382,15 +3405,7 @@ def _render_jobs_admin_like():
     with f3:
         # 실수령 미리보기
         st.metric("실수령액(자동)", _calc_net(int(sal_in), cfg))
-
-    # 학생 수(기본 1)
-    sc_in = st.number_input(
-        "학생 수(최소 1)",
-        min_value=1,
-        step=1,
-        value=int(edit_row["student_count"]) if edit_row else 1,
-        key="job_in_count",
-    )
+    # ✅ (PATCH) class 앱과 동일하게 '사람 수/정원' 제한을 사용하지 않습니다(무제한 배정)
     b1, b2, b3 = st.columns([1, 1, 1])
     with b1:
         if st.button("✅ 저장", use_container_width=True, key="job_save_btn"):
@@ -3399,42 +3414,41 @@ def _render_jobs_admin_like():
                 st.stop()
 
             if edit_row:
-                # 수정
-                rid = edit_row["_id"]
-                # assigned_ids 길이 맞추기(수정 시 학생수 바뀔 수 있음)
-                cur_ids = list(edit_row.get("assigned_ids", []) or [])
-                if len(cur_ids) < int(sc_in):
-                    cur_ids = cur_ids + [""] * (int(sc_in) - len(cur_ids))
-                if len(cur_ids) > int(sc_in):
-                    cur_ids = cur_ids[: int(sc_in)]
+    # 수정 (정원/사람수 제한 없음)
+    rid = edit_row["_id"]
+    cur_ids = list(edit_row.get("assigned_ids", []) or [])
+    # ✅ 빈 문자열 슬롯 방식이 섞여 있으면 제거
+    cur_ids = [sid for sid in cur_ids if sid]
 
-                db.collection("job_salary").document(rid).update(
-                    {
-                        "job": job_in,
-                        "salary": int(sal_in),
-                        "student_count": int(sc_in),
-                        "assigned_ids": cur_ids,
-                        "updated_at": firestore.SERVER_TIMESTAMP,
-                    }
-                )
-                toast("수정 완료!", icon="✅")
-                st.rerun()
-            else:
-                # 신규 추가(order는 입력 순서대로 마지막+1)
-                new_order = _next_order(rows)
-                db.collection("job_salary").document().set(
-                    {
-                        "order": int(new_order),
-                        "job": job_in,
-                        "salary": int(sal_in),
-                        "student_count": int(sc_in),
-                        "assigned_ids": [""] * int(sc_in),
-                        "created_at": firestore.SERVER_TIMESTAMP,
-                        "updated_at": firestore.SERVER_TIMESTAMP,
-                    }
-                )
-                toast("추가 완료!", icon="✅")
-                st.rerun()
+    db.collection("job_salary").document(rid).update(
+        {
+            "job": job_in,
+            "salary": int(sal_in),
+            # student_count는 기존 데이터 호환을 위해 남기되, 의미적으로는 '무제한' 처리
+            "student_count": 0,
+            "assigned_ids": cur_ids,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    toast("수정 완료!", icon="✅")
+    st.rerun()
+else:
+    # 신규 추가 (정원/사람수 제한 없음)
+    new_order = _next_order(rows)
+    db.collection("job_salary").document().set(
+        {
+            "order": int(new_order),
+            "job": job_in,
+            "salary": int(sal_in),
+            "student_count": 0,
+            "assigned_ids": [],
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    toast("추가 완료!", icon="✅")
+    st.rerun()
+
 
     # ✅ 입력 초기화 버튼 삭제 (자리만 빈 칸으로 유지)
     with b2:
