@@ -312,42 +312,20 @@ def _is_savings_memo(memo: str) -> bool:
     return ("적금 가입" in memo) or ("적금 해지" in memo) or ("적금 만기" in memo)
 
 
-def render_asset_summary(
-    balance_now: int,
-    savings_list: list[dict],
-    role_name: str | None = None,
-    invest_principal: int | None = None,
-    invest_value: int | None = None,
-):
+def render_asset_summary(balance_now: int, savings_list: list[dict]):
     sv_total = sum(
         int(s.get("principal", 0) or 0)
         for s in (savings_list or [])
         if str(s.get("status", "")).lower().strip() == "active"
     )
-
-    inv_pr = int(invest_principal or 0) if invest_principal is not None else 0
-    inv_val = int(invest_value or 0) if invest_value is not None else 0
-
-    # ✅ 총자산 = 통장잔액 + 적금총액 + (있다면) 투자 현재평가
-    asset_total = int(balance_now) + int(sv_total) + int(inv_val)
-
-    r1 = st.columns(3)
-    with r1[0]:
-        st.metric("총 자산", f"{int(asset_total)}")
-    with r1[1]:
+    asset_total = int(balance_now) + int(sv_total)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("총 자산", f"{asset_total}")
+    with c2:
         st.metric("통장 잔액", f"{int(balance_now)}")
-    with r1[2]:
+    with c3:
         st.metric("적금 총액", f"{int(sv_total)}")
-
-    # ✅ (요청) 관리자 개별조회에서 '직업/투자'도 같은 줄(2번째 줄)로 표시
-    if (role_name is not None) or (invest_principal is not None) or (invest_value is not None):
-        r2 = st.columns(3)
-        with r2[0]:
-            st.metric("직업", f"{str(role_name or '없음')}")
-        with r2[1]:
-            st.metric("투자 원금", f"{int(inv_pr)}")
-        with r2[2]:
-            st.metric("현재 평가금", f"{int(inv_val)}")
 
 
 def savings_active_total(savings_list: list[dict]) -> int:
@@ -1384,273 +1362,6 @@ def _get_invest_principal_by_student_id(student_id: str) -> tuple[str, int]:
     except Exception:
         return ("없음", 0)
 
-def _calc_invest_principal_and_value(student_id: str) -> tuple[int, int]:
-    """✅ 투자 원금 합계, 현재 평가금 합계(보유 중인 항목만)"""
-    try:
-        sid = str(student_id or "")
-        if not sid:
-            return (0, 0)
-
-        prods_now = _get_products(active_only=True)
-        price_by_id = {str(p["product_id"]): float(p.get("current_price", 0.0) or 0.0) for p in prods_now}
-        name_by_id = {str(p["product_id"]): str(p.get("name", "") or "") for p in prods_now}
-
-        rows = []
-        try:
-            q = (
-                db.collection("invest_ledger")
-                .where(filter=FieldFilter("student_id", "==", str(sid)))
-                .order_by("buy_at", direction=firestore.Query.DESCENDING)
-                .limit(400)
-                .stream()
-            )
-            for d in q:
-                x = d.to_dict() or {}
-                rows.append({**x, "_doc_id": d.id})
-        except Exception:
-            # 인덱스/정렬 실패 대비
-            try:
-                q = (
-                    db.collection("invest_ledger")
-                    .where(filter=FieldFilter("student_id", "==", str(sid)))
-                    .limit(400)
-                    .stream()
-                )
-                for d in q:
-                    x = d.to_dict() or {}
-                    rows.append({**x, "_doc_id": d.id})
-            except Exception:
-                rows = []
-
-        principal_total = 0
-        eval_total = 0
-
-        for r in rows:
-            if bool(r.get("redeemed", False)):
-                continue
-
-            amt = int(r.get("invest_amount", 0) or 0)
-            if amt <= 0:
-                continue
-            principal_total += amt
-
-            pid = str(r.get("product_id", "") or "")
-            buy_price = float(r.get("buy_price", 0.0) or 0.0)
-            cur_price = float(price_by_id.get(pid, 0.0) or 0.0)
-
-            if buy_price > 0 and cur_price > 0:
-                cur_val = amt * (cur_price / buy_price)
-            else:
-                cur_val = amt
-            eval_total += int(round(cur_val))
-
-        return (int(principal_total), int(eval_total))
-    except Exception:
-        return (0, 0)
-
-
-
-
-
-def _render_price_history_table_and_chart(product: dict):
-    """✅ 주가 변동 표 + 그래프 (관리자/사용자 공용, 표시 전용)"""
-    p = product or {}
-    pid = p.get("product_id")
-    if not pid:
-        st.info("주가 변동 데이터가 없어요.")
-        return
-
-    # ✅ (PATCH) _get_history가 다른 스코프에 있어 NameError가 나는 경우가 있어,
-    # 여기서 직접 Firestore에서 주가 변동 히스토리를 로드합니다.
-    hist = []
-    try:
-        q = (
-            db.collection("invest_price_history")
-            .where(filter=FieldFilter("product_id", "==", str(pid)))
-            .order_by("created_at", direction=firestore.Query.DESCENDING)
-            .limit(120)
-            .stream()
-        )
-        for d in q:
-            x = d.to_dict() or {}
-            hist.append({**x, "_doc_id": d.id})
-    except Exception:
-        # 인덱스/정렬 실패 대비: 정렬 없이 가져와서 파이썬에서 정렬
-        try:
-            q = (
-                db.collection("invest_price_history")
-                .where(filter=FieldFilter("product_id", "==", str(pid)))
-                .limit(120)
-                .stream()
-            )
-            for d in q:
-                x = d.to_dict() or {}
-                hist.append({**x, "_doc_id": d.id})
-        except Exception:
-            hist = []
-    # 최신 → 과거 순으로 정렬(가능할 때)
-    try:
-        hist.sort(key=lambda x: float(x.get("created_at", 0) or 0), reverse=True)
-    except Exception:
-        pass
-
-
-    # ✅ (PATCH) created_at 타입이 Timestamp/Datetime/None 등 섞여도 안전 변환
-    def _ts_to_dt_local(v):
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            return v
-        try:
-            # Firestore Timestamp
-            if hasattr(v, "to_datetime"):
-                out = v.to_datetime()
-                if isinstance(out, datetime):
-                    return out
-        except Exception:
-            pass
-        try:
-            # epoch seconds / millis
-            fv = float(v)
-            if fv > 1e12:  # millis
-                fv = fv / 1000.0
-            return datetime.fromtimestamp(fv, tz=timezone.utc)
-        except Exception:
-            return None
-    if not hist:
-        st.info("주가 변동 데이터가 아직 없어요.")
-        return
-
-    rows = []
-    for h in hist:
-        dt = _ts_to_dt_local(h.get("created_at"))
-        pb = float(h.get("price_before", 0.0) or 0.0)
-        pa = float(h.get("price_after", 0.0) or 0.0)
-        diff = round(pa - pb, 1)
-
-        def _fmt_kor_datetime(dt_obj):
-            if not dt_obj:
-                return "-"
-            try:
-                dt_kst = dt_obj.astimezone(KST)
-            except Exception:
-                dt_kst = dt_obj
-
-            hour = dt_kst.hour
-            ampm = "오전" if hour < 12 else "오후"
-            hh = hour if 1 <= hour <= 12 else (hour - 12 if hour > 12 else 12)
-            return f"{dt_kst.month}월 {dt_kst.day}일({days_ko[dt_kst.weekday()]}) {ampm} {hh:02d}시 {dt_kst.minute:02d}분"
-
-        if diff > 0:
-            diff_view = f"<span style='color:red'>▲ +{diff:.1f}</span>"
-        elif diff < 0:
-            diff_view = f"<span style='color:blue'>▼ {diff:.1f}</span>"
-        else:
-            diff_view = "-"
-
-        rows.append(
-            {
-                "변동일시": _fmt_kor_datetime(dt),
-                "변동사유": h.get("reason", "") or "",
-                "주가": f"{pa:.1f}",
-                "주가 등락": diff_view,
-            }
-        )
-
-    df = pd.DataFrame(rows)
-
-    left, right = st.columns([1.7, 2.2], gap="large")
-    with left:
-        st.markdown(df.to_html(escape=False, index=False, classes="inv_hist_table"), unsafe_allow_html=True)
-
-    with right:
-        # ✅ 꺾은선 그래프(시작→변동 순서)
-        pts = []
-
-        init_price = None
-        oldest = hist[-1]  # 최신순에서 마지막이 가장 오래됨
-        init_price = float(oldest.get("price_before", 0.0) or 0.0)
-        if init_price is None:
-            init_price = float(p.get("current_price", 0.0) or 0.0)
-
-        pts.append({"idx": 0, "label": "시작주가", "price": round(init_price, 1)})
-
-        _i = 1
-        for h2 in reversed(hist):
-            reason2 = str(h2.get("reason", "") or "").strip() or "-"
-            pa2 = float(h2.get("price_after", 0.0) or 0.0)
-            pts.append({"idx": _i, "label": reason2, "price": round(pa2, 1)})
-            _i += 1
-
-        pts_df = pd.DataFrame(pts)
-        if pts_df.empty or (len(pts_df) < 2):
-            st.info("주가 변동 데이터가 아직 없어요.")
-            return
-
-        seg_long = []
-        for i in range(len(pts) - 1):
-            p1 = float(pts[i]["price"])
-            p2 = float(pts[i + 1]["price"])
-            if p2 > p1:
-                d = "up"
-            elif p2 < p1:
-                d = "down"
-            else:
-                d = "same"
-            seg_long.append({"segment_id": i, "idx": i, "price": p1, "dir": d})
-            seg_long.append({"segment_id": i, "idx": i + 1, "price": p2, "dir": d})
-
-        seg_df = pd.DataFrame(seg_long)
-
-        # ✅ Altair가 있으면: 빨강/파랑/검정 + 회색 점
-        if alt is not None:
-            try:
-                _lbl_map = pts_df[["idx", "label"]].copy()
-                seg_df = seg_df.drop(columns=["label"], errors="ignore").merge(_lbl_map, on="idx", how="left")
-                seg_df["label"] = seg_df["label"].fillna("-")
-
-                color_scale = alt.Scale(domain=["up", "down", "same"], range=["red", "blue", "black"])
-
-                x_enc = alt.X(
-                    "label:N",
-                    sort=alt.SortField("idx", order="ascending"),
-                    axis=alt.Axis(title=None, labelAngle=0),
-                )
-                y_enc = alt.Y(
-                    "price:Q",
-                    scale=alt.Scale(domain=[50, 100]),
-                    axis=alt.Axis(title=None, values=list(range(50, 101, 10))),
-                )
-
-                base_line = (
-                    alt.Chart(seg_df)
-                    .mark_line()
-                    .encode(
-                        x=x_enc,
-                        y=y_enc,
-                        color=alt.Color("dir:N", scale=color_scale, legend=None),
-                        detail="segment_id:N",
-                    )
-                )
-
-                pts_layer = (
-                    alt.Chart(pts_df)
-                    .mark_point(filled=True, color="gray", size=70)
-                    .encode(
-                        x=x_enc,
-                        y=y_enc,
-                        tooltip=[alt.Tooltip("label:N", title="변동사유"), alt.Tooltip("price:Q", title="주가")],
-                    )
-                )
-
-                chart = (base_line + pts_layer).properties(height=260)
-                st.altair_chart(chart, use_container_width=True)
-                return
-            except Exception:
-                pass
-
-        # ✅ fallback
-        st.line_chart(pts_df.set_index("idx")["price"])
 
 def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, my_student_id, login_name, login_pin):
     """관리자 투자 화면을 동일하게 렌더링(권한 학생의 투자(관리자) 탭에서도 동일 UI/기능)."""
@@ -1975,12 +1686,6 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
             nm = p["name"]
             cur = p["current_price"]
             st.markdown(f"- **{nm}** (현재주가 **{cur:.1f}**)")
-
-            # ✅ (사용자) 표+그래프만 보기 (입력/저장 버튼은 숨김)
-            if not inv_admin_ok:
-                with st.expander(f"{nm} 주가 변동(표/그래프)", expanded=False):
-                    _render_price_history_table_and_chart(p)
-
     
             if inv_admin_ok:
                 with st.expander(f"{nm} 주가 변동 반영", expanded=False):
@@ -2028,7 +1733,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                     if hist:
                         rows = []
                         for h in hist:
-                            dt = _ts_to_dt_local(h.get("created_at"))
+                            dt = _ts_to_dt(h.get("created_at"))
                             pb = float(h.get("price_before", 0.0) or 0.0)
                             pa = float(h.get("price_after", 0.0) or 0.0)
                             diff = round(pa - pb, 1)
@@ -2037,6 +1742,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                             def _fmt_kor_datetime(dt_obj):
                                 if not dt_obj:
                                     return "-"
+                                days_ko = ["월", "화", "수", "목", "금", "토", "일"]
                                 try:
                                     dt_kst = dt_obj.astimezone(KST)
                                 except Exception:
@@ -2190,6 +1896,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
         redeemed = bool(x.get("redeemed", False))
         view_rows.append(
             {
+                "번호": int(x.get("no", 0) or 0),
                 "이름": str(x.get("name", "") or ""),
                 "종목": str(x.get("product_name", "") or ""),
                 "매입일자": str(x.get("buy_date_label", "") or ""),
@@ -2242,7 +1949,9 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     
                 diff, profit, redeem_amt = _calc_redeem_amount(invest_amt, buy_price, cur_price)
     
-                c2, c3, c4 = st.columns([2.2, 2.8, 1.2], gap="small")
+                c1, c2, c3, c4 = st.columns([1.2, 2.2, 2.8, 1.2], gap="small")
+                with c1:
+                    st.markdown(f"**{x.get('번호','')}**")
                 with c2:
                     st.markdown(f"{x.get('이름','')}")
                     st.caption(prod_name)
@@ -3474,13 +3183,7 @@ def render_goal_readonly_admin(student_id: str, balance_now: int, savings: list[
                 if m_date <= goal_date:
                     interest_before_goal += interest3
 
-    inv_val_now = 0
-    try:
-        inv_val_now = _calc_invest_principal_and_value(str(student_id or ""))[1]
-    except Exception:
-        inv_val_now = 0
-
-    expected_amount = int(balance_now) + int(principal_all_active) + int(interest_before_goal) + int(inv_val_now)
+    expected_amount = int(balance_now) + int(principal_all_active) + int(interest_before_goal)
     exp_ratio = clamp01(expected_amount / goal_amount if goal_amount > 0 else 0)
 
     st.write(f"- 목표 금액: **{goal_amount}**")
@@ -4348,15 +4051,10 @@ if st.session_state.admin_ok:
             savings = sres.get("savings", []) if sres.get("ok") else []
             sv_total = savings_active_total(savings)
             bal_now = int(a.get("balance", 0) or 0)
-
-            # ✅ (PATCH) 개별 사용자 요약표에 필요한 직업/투자값 계산(NameError 방지)
-            _role = _get_role_name_by_student_id(sid) if sid else "없음"
-            _inv_pr, _inv_val = _calc_invest_principal_and_value(sid) if sid else (0, 0)
-
             asset_total = bal_now + sv_total
 
             with st.expander(f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total}", expanded=False):
-                render_asset_summary(bal_now, savings, role_name=_role, invest_principal=_inv_pr, invest_value=_inv_val)
+                render_asset_summary(bal_now, savings)
                 st.markdown("### 📒 통장내역")
                 txr = api_get_txs_by_student_id(sid, limit=120)
                 if not txr.get("ok"):
@@ -4395,9 +4093,10 @@ if st.session_state.admin_ok:
         with tabs[i]:
             nm, sid = a["name"], a["student_id"]
 
-            # ✅ 직업/투자(원금/현재평가) 표시 → 아래 자산요약 2번째 줄로 이동
+            # ✅ (class앱 기준) 직업/투자 현재평가 표시
             _role = _get_role_name_by_student_id(str(sid))
-            _inv_pr, _inv_val = _calc_invest_principal_and_value(str(sid))
+            _inv_text, _inv_total = _get_invest_summary_by_student_id(str(sid))
+            st.caption(f"직업: {_role} · 투자(현재평가): {int(_inv_total)} 포인트")
 
             txr = api_get_txs_by_student_id(sid, limit=300)
             df_tx = pd.DataFrame(txr.get("rows", [])) if txr.get("ok") else pd.DataFrame()
@@ -4408,7 +4107,7 @@ if st.session_state.admin_ok:
             bal_now = int(a.get("balance", 0) or 0)
 
             st.subheader(f"👤 {nm}")
-            render_asset_summary(bal_now, savings, role_name=_role, invest_principal=_inv_pr, invest_value=_inv_val)
+            render_asset_summary(bal_now, savings)
 
             st.markdown("### 📒 통장내역")
             if not df_tx.empty:
@@ -4491,7 +4190,7 @@ st.markdown(f"#### 적금 금액: **{sv_total} 포인트**")
 st.markdown(f"#### 투자 금액(현재 평가금): **{int(inv_total)} 포인트**")
 st.markdown(f"#### 직업: **{role_name}**")
 
-sub1, sub2, sub_invest, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표"])
+sub1, sub2, sub_invest, sub_job, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "💼 직업", "🎯 목표"])
 
 # =========================
 # 거래 탭
@@ -4671,8 +4370,14 @@ with sub_invest:
 # =========================
 # 직업 탭
 # =========================
-# (사용자) 💼 직업 탭 제거됨
+with sub_job:
+    st.subheader("💼 직업")
+    st.write(f"현재 직업: **{role_name}**")
 
+
+# =========================
+# 목표 탭
+# =========================
 with sub3:
     render_goal_section(name, pin, balance, savings_list)
 
