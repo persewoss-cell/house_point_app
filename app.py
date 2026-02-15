@@ -4527,7 +4527,6 @@ with sub2:
 # 투자 탭
 # =========================
 with sub_invest:
-    st.subheader("📈 투자")
     _render_invest_admin_like(
         inv_admin_ok_flag=False,
         force_is_admin=False,
@@ -4548,5 +4547,6 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
