@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 from datetime import datetime, timezone, timedelta, date
 
 import firebase_admin
@@ -2002,7 +2001,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                                         return "down"
                                     return "same"
                                 seg_df["direction_seg"] = seg_df.apply(_seg_dir, axis=1)
-                                # ✅ (PATCH) 주가 변동 그래프 (Matplotlib: 상승=빨강, 하락=파랑, 보합=검정 / 변동지점=회색 점)
+                                # ✅ (PATCH) 주가 변동 그래프: matplotlib/altair 있으면 색상구간, 없으면 기본 꺾은선
                                 try:
                                     _df = (seg_df if 'seg_df' in locals() else chart_df).copy()
                                     _tcol = None
@@ -2010,6 +2009,61 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                                         if _c in _df.columns:
                                             _tcol = _c
                                             break
+                                    if _tcol and _tcol != '변동일시':
+                                        _df[_tcol] = pd.to_datetime(_df[_tcol], errors='coerce')
+                                        _df = _df.dropna(subset=[_tcol]).sort_values(_tcol)
+                                        x = _df[_tcol].tolist()
+                                    else:
+                                        x = list(range(len(_df)))
+                                
+                                    _pcol = None
+                                    for _c in ['변동 후','price','current_price','value','close','y']:
+                                        if _c in _df.columns:
+                                            _pcol = _c
+                                            break
+                                    if _pcol is None:
+                                        num_cols = [c for c in _df.columns if pd.api.types.is_numeric_dtype(_df[c])]
+                                        _pcol = num_cols[0] if num_cols else None
+                                
+                                    if _pcol is None or len(_df) == 0:
+                                        st.info('주가 변동 그래프를 표시할 데이터가 없어요.')
+                                    else:
+                                        y = [float(v) for v in _df[_pcol].tolist()]
+                                        # 1) matplotlib
+                                        try:
+                                            import matplotlib.pyplot as plt
+                                            fig = plt.figure()
+                                            ax = fig.add_subplot(111)
+                                            for i2 in range(1, len(y)):
+                                                dy = y[i2] - y[i2-1]
+                                                c = 'red' if dy > 0 else ('blue' if dy < 0 else 'black')
+                                                ax.plot([x[i2-1], x[i2]], [y[i2-1], y[i2]], color=c)
+                                            if len(y) >= 2:
+                                                ax.scatter(x[1:], y[1:], color='gray', s=18)
+                                            ax.grid(True, alpha=0.2)
+                                            st.pyplot(fig, clear_figure=True, use_container_width=True)
+                                        except Exception:
+                                            # 2) altair
+                                            try:
+                                                import altair as alt
+                                                seg_rows = []
+                                                for i2 in range(1, len(y)):
+                                                    dy = y[i2] - y[i2-1]
+                                                    direction = 'up' if dy > 0 else ('down' if dy < 0 else 'same')
+                                                    seg_rows.append({'x': x[i2-1], 'x2': x[i2], 'y': y[i2-1], 'y2': y[i2], 'direction': direction})
+                                                seg_df2 = pd.DataFrame(seg_rows)
+                                                pts_df = pd.DataFrame({'x': x[1:], 'y': y[1:]}) if len(y) >= 2 else pd.DataFrame({'x': [], 'y': []})
+                                                base = alt.Chart(seg_df2).mark_rule(strokeWidth=3).encode(
+                                                    x='x', x2='x2', y='y', y2='y2',
+                                                    color=alt.Color('direction', scale=alt.Scale(domain=['up','down','same'], range=['red','blue','black']), legend=None)
+                                                )
+                                                pts = alt.Chart(pts_df).mark_point(color='gray').encode(x='x', y='y')
+                                                st.altair_chart(base + pts, use_container_width=True)
+                                            except Exception:
+                                                st.line_chart(pd.Series(y))
+                                except Exception:
+                                    st.info('주가 변동 그래프를 표시하지 못했어요(그래프 데이터 확인 필요).')
+                                
                                     if _tcol and _tcol != '변동일시':
                                         _df[_tcol] = pd.to_datetime(_df[_tcol], errors='coerce')
                                         _df = _df.dropna(subset=[_tcol]).sort_values(_tcol)
