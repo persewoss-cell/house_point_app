@@ -3282,6 +3282,7 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
     now_ratio = clamp01((now_amount / goal_amount) if goal_amount > 0 else 0)
     exp_ratio = clamp01((expected_amount / goal_amount) if goal_amount > 0 else 0)
 
+    st.write(f"총 자산 기준: **{now_ratio*100:.1f}%** (현재 {now_amount} / 목표 {goal_amount})")
     st.progress(exp_ratio)
     st.write(f"총 자산 기준 예상 달성률: **{exp_ratio*100:.1f}%** (예상 {expected_amount} / 목표 {goal_amount})")
 
@@ -4206,8 +4207,23 @@ if st.session_state.admin_ok:
             bal_now = int(a.get("balance", 0) or 0)
             asset_total = bal_now + sv_total
 
-            with st.expander(f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total}", expanded=False):
+            # ✅ 직업/투자(원금/현재평가) 요약
+            _role = _get_role_name_by_student_id(str(sid))
+            _inv_text, _inv_total = _get_invest_summary_by_student_id(str(sid))
+            _inv_principal_text, _inv_principal_total = _get_invest_principal_by_student_id(str(sid))
+
+            with st.expander(
+                f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total} · 투자원금 {int(_inv_principal_total)} · 현재평가금 {int(_inv_total)}",
+                expanded=False,
+            ):
                 render_asset_summary(bal_now, savings)
+
+                # ✅ (PATCH) 전체통장에서도 직업/투자 정보를 다음 줄에 표시
+                r2 = st.columns(3)
+                r2[0].metric("직업", _role if _role else "없음")
+                r2[1].metric("투자 원금", f"{int(_inv_principal_total)}")
+                r2[2].metric("현재 평가금", f"{int(_inv_total)}")
+
                 st.markdown("### 📒 통장내역")
                 txr = api_get_txs_by_student_id(sid, limit=120)
                 if not txr.get("ok"):
@@ -4219,8 +4235,6 @@ if st.session_state.admin_ok:
                     else:
                         df_tx = df_tx.sort_values("created_at_utc", ascending=False)
                         render_tx_table(df_tx)
-
-
     # -------------------------
     # 💼 직업/월급 (관리자)
     # -------------------------
@@ -4351,7 +4365,7 @@ st.markdown(f"## 🧾 {name} 통장")
 st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
 st.markdown(f"#### 💰 통장 잔액: **{balance} 포인트**")
 st.markdown(f"#### 🏦 적금 금액: **{sv_total} 포인트**")
-st.markdown(f"#### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
+st.markdown(f"#### 🪙투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
 st.markdown(f"#### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
 st.markdown(f"#### 💼 직업: **{role_name}**")
 
@@ -4543,8 +4557,6 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
-
-
 
 
 
