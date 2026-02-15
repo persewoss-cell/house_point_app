@@ -1672,9 +1672,6 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
             principal_by_name = {}
             eval_by_name = {}
 
-        st.divider()
-
-    
     products = _get_products(active_only=True)
     if not products:
         st.info("등록된 투자 종목이 없습니다. (관리자) 아래에서 종목을 먼저 추가해 주세요.")
@@ -4547,6 +4544,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
