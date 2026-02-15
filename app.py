@@ -1598,7 +1598,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     # -------------------------------------------------
     # 1) (상단) 종목 및 주가 변동
     # -------------------------------------------------
-    st.markdown("📈 **종목 및 주가 변동**")
+    st.markdown("### 📈 종목 및 주가 변동")
     
     # (사용자) 상단 요약: 통장 잔액 / 투자 원금 / 현재 평가
     if not is_admin:
@@ -4547,6 +4547,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
