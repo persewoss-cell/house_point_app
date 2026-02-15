@@ -177,7 +177,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown(f'<div class="app-title">🏠 {APP_TITLE}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="app-title">🏡 {APP_TITLE}</div>', unsafe_allow_html=True)
 
 # =========================
 # Firestore init
@@ -4556,6 +4556,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
