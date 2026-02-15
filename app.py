@@ -16,7 +16,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 # =========================
 # 설정
 # =========================
-APP_TITLE = "우리집 포인트 통장"
+APP_TITLE = "우리집 포인트 통장🪙"
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
 KST = timezone(timedelta(hours=9))
@@ -4556,6 +4556,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
