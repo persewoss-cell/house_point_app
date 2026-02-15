@@ -4343,9 +4343,14 @@ sv_total = sum(
     if str(s.get("status", "")).lower() == "active"
 )
 
-# ✅ (class앱 기준) 투자 현재 평가금(현재가치) + 직업명
+# ✅ (class앱 기준) 투자 원금/현재평가(현재가치) + 직업명
 inv_text, inv_total = _get_invest_summary_by_student_id(str(student_id or ""))
+inv_pr_text, inv_pr_total = _get_invest_principal_by_student_id(str(student_id or ""))
 role_name = _get_role_name_by_student_id(str(student_id or ""))
+
+# helper: 드림 → 포인트(표시용)
+inv_text_pt = str(inv_text or "").replace("드림", "포인트")
+inv_pr_text_pt = str(inv_pr_text or "").replace("드림", "포인트")
 
 asset_total = balance + sv_total + int(inv_total)
 
@@ -4353,7 +4358,8 @@ st.markdown(f"## 🧾 {name} 통장")
 st.markdown(f"### 총 자산: **{asset_total} 포인트**")
 st.markdown(f"#### 통장 잔액: **{balance} 포인트**")
 st.markdown(f"#### 적금 금액: **{sv_total} 포인트**")
-st.markdown(f"#### 투자 금액(현재 평가금): **{int(inv_total)} 포인트**")
+st.markdown(f"#### 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
+st.markdown(f"#### 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
 st.markdown(f"#### 직업: **{role_name}**")
 
 sub1, sub2, sub_invest, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표"])
