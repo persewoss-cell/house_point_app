@@ -2083,7 +2083,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
         can_redeem_now = _can_redeem(my_student_id)
         can_pay_now = bool(is_admin or can_redeem_now)
         if not can_pay_now:
-            st.info("투자 회수는 관리자 또는 '투자증권' 직업 학생만 할 수 있어요.")
+            st.info("투자 회수는 관리자만 할 수 있어요. 관리자에게 요청하세요.")
         for x in pending[:100]:
                 doc_id = str(x.get("_doc_id", "") or "")
                 sid = str(x.get("_student_id", "") or "")
@@ -4556,6 +4556,7 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
