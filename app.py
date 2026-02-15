@@ -3215,7 +3215,8 @@ def render_active_savings_list(savings: list[dict], name: str, pin: str, balance
 
 
 def render_goal_section(name: str, pin: str, balance: int, savings_list: list[dict]):
-    st.markdown("### 🎯 목표 저금")
+    # ✅ (PATCH) 목표 날짜 기준 D-day 표시
+    _goal_header = st.empty()
     goal = st.session_state.data.get(name, {}).get("goal", {"ok": False})
     if not goal.get("ok"):
         st.error(goal.get("error", "목표 정보를 불러오지 못했어요."))
@@ -3241,6 +3242,19 @@ def render_goal_section(name: str, pin: str, balance: int, savings_list: list[di
             except Exception:
                 pass
         g_date = st.date_input("목표 날짜", value=default_date, key=f"goal_date_{name}")
+
+    # ✅ (PATCH) D-day 계산 (목표 날짜 기준)
+    try:
+        _today = date.today()
+        _dd = int((g_date - _today).days)
+        _sign = "-" if _dd >= 0 else "+"  # 지난 날짜면 D+로 표시
+        _num = f"{abs(_dd):02d}"
+        _goal_header.markdown(
+            f'### 🎯 목표 저금 <span style="font-size:0.85em;color:#6b7280">(D{_sign}{_num}일)</span>',
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        _goal_header.markdown("### 🎯 목표 저금")
 
     if st.button("목표 저장", key=f"goal_save_{name}", use_container_width=True):
         res = api_set_goal(name, pin, int(g_amt), g_date.isoformat())
@@ -3415,7 +3429,7 @@ with st.sidebar:
 
 
 # =========================
-# Main: 로그인 (이름 저장 체크)
+# Main: 로그인
 # =========================
 if st.session_state.get("logged_in", False):
     _who = str(st.session_state.get("login_name", "") or "").strip()
@@ -3423,16 +3437,12 @@ if st.session_state.get("logged_in", False):
 else:
     st.subheader("🔐 로그인")
 
-qp = st.query_params
-saved_name = str(qp.get("saved_name", "") or "")
-
 if not st.session_state.logged_in:
     # ✅ Enter로 로그인 제출 가능하도록 form 사용
     with st.form("login_form", clear_on_submit=False):
         login_c1, login_c2, login_c3 = st.columns([2, 2, 1])
         with login_c1:
-            login_name = st.text_input("이름", value=saved_name, key="login_name_input").strip()
-            remember = st.checkbox("이름 저장", value=bool(saved_name), key="remember_name")
+            login_name = st.text_input("이름", key="login_name_input").strip()
         with login_c2:
             login_pin = st.text_input("비밀번호(4자리)", type="password", key="login_pin_input").strip()
         with login_c3:
@@ -3450,11 +3460,6 @@ if not st.session_state.logged_in:
                 st.session_state.login_name = ADMIN_NAME
                 st.session_state.login_pin = ADMIN_PIN
 
-                if remember and login_name:
-                    st.query_params["saved_name"] = login_name
-                else:
-                    st.query_params.pop("saved_name", None)
-
                 toast("관리자 모드 ON", icon="🔓")
                 st.rerun()
 
@@ -3467,11 +3472,6 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.login_name = login_name
                     st.session_state.login_pin = login_pin
-
-                    if remember and login_name:
-                        st.query_params["saved_name"] = login_name
-                    else:
-                        st.query_params.pop("saved_name", None)
 
                     toast("로그인 완료!", icon="✅")
                     st.rerun()
@@ -4556,15 +4556,3 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
-
-
-
-
-
-
-
-
-
-
-
-
