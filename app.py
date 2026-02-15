@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone, timedelta, date
+import altair as alt
 
 import firebase_admin
 from firebase_admin import credentials, firestore
