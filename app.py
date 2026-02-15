@@ -264,10 +264,18 @@ def format_kr_datetime(val) -> str:
         except Exception:
             return s
 
+    # ✅ (PATCH) 요일(한글 1글자) 추가: 2026년 02월 16일(월) 오전 08시 25분
+    _dow_map = ["월", "화", "수", "목", "금", "토", "일"]
+    try:
+        dow = _dow_map[dt.weekday()]
+    except Exception:
+        dow = ""
+
     ampm = "오전" if dt.hour < 12 else "오후"
     hour12 = dt.hour % 12
     hour12 = 12 if hour12 == 0 else hour12
-    return f"{dt.year}년 {dt.month:02d}월 {dt.day:02d}일 {ampm} {hour12:02d}시 {dt.minute:02d}분"
+    dow_txt = f"({dow})" if dow else ""
+    return f"{dt.year}년 {dt.month:02d}월 {dt.day:02d}일{dow_txt} {ampm} {hour12:02d}시 {dt.minute:02d}분"
 
 
 def _to_utc_datetime(ts):
