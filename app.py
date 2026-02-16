@@ -626,6 +626,10 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
     for tid, tx in tx_docs:
         ttype = str(tx.get("type", "") or "")
         memo = str(tx.get("memo", "") or "")
+        # ✅ (PATCH) 투자 관련 내역은 되돌리기 불가(투자 탭 기록 보호)
+        if ("투자" in memo) or ttype.startswith("invest"):
+            blocked.append((tid, "투자 관련 내역"))
+            continue
         if ttype == "rollback":
             blocked.append((tid, "이미 되돌리기 기록"))
             continue
@@ -661,6 +665,18 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
             bal = int((st_snap.to_dict() or {}).get("balance", 0))
             new_bal = bal + rollback_amount
             transaction.update(student_ref, {"balance": new_bal})
+            # ✅ (PATCH) rollback 메모: "삭제한 내역명(mm.dd.) 되돌리기" (문서ID 노출 금지)
+            rb_src_memo = str(tx.get("memo", "") or "").strip() or "-"
+            rb_dt = _to_utc_datetime(tx.get("created_at"))
+            try:
+                rb_kst = rb_dt.astimezone(KST) if rb_dt else None
+            except Exception:
+                rb_kst = rb_dt
+            rb_mmdd = f"{rb_kst.month:02d}.{rb_kst.day:02d}." if rb_kst else ""
+            rb_label = f"{rb_src_memo}({rb_mmdd}) 되돌리기" if rb_mmdd else f"{rb_src_memo} 되돌리기"
+            if len(rb_label) > 80:
+                rb_label = rb_label[:77] + "…"
+
             transaction.set(
                 rollback_ref,
                 {
@@ -668,7 +684,7 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
                     "type": "rollback",
                     "amount": rollback_amount,
                     "balance_after": new_bal,
-                    "memo": f"{tid} 되돌리기",
+                    "memo": rb_label,
                     "related_tx": tid,
                     "created_at": firestore.SERVER_TIMESTAMP,
                 },
@@ -3827,9 +3843,20 @@ if st.session_state.admin_ok:
                     view_df = df_rb.head(50).copy()
 
                     def _can_rollback_row(row):
-                        if str(row.get("type", "")) == "rollback":
+                        # ✅ rollback 자체 / 적금 관련 / 만기 / 이미 되돌린 건 / 투자 관련은 되돌리기 불가
+                        tx_id0 = str(row.get("tx_id", "") or "")
+                        t0 = str(row.get("type", "") or "")
+                        m0 = str(row.get("memo", "") or "")
+
+                        if t0 == "rollback":
                             return False
-                        if _is_savings_memo(row.get("memo", "")) or str(row.get("type", "")) in ("maturity",):
+                        if _is_savings_memo(m0) or t0 in ("maturity",):
+                            return False
+                        # ✅ 이미 되돌리기 1번 한 거래는 다시 되돌리기 버튼 비활성화
+                        if tx_id0 and _already_rolled_back(str(sid_rb or ""), tx_id0):
+                            return False
+                        # ✅ 투자 내역은 되돌리기 비활성화
+                        if ("투자" in m0) or t0.startswith("invest"):
                             return False
                         return True
 
