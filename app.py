@@ -1268,28 +1268,17 @@ def api_reflect_lottery_ledger(admin_pin: str, round_id: str):
     total_amount = int(ticket_count * price)
 
     prize_total = 0
-    third_total = 0
-    first_pct = int(rd.get("first_pct", 80) or 80)
-    second_pct = int(rd.get("second_pct", 20) or 20)
     tax_rate = int(rd.get("tax_rate", 40) or 40)
-    has_first_winner = False
-    has_second_winner = False
+    taxable_prize_total = 0
     for w in winners:
         x = w.to_dict() or {}
         pz = int(x.get("prize", 0) or 0)
         prize_total += pz
         rank = str(x.get("rank", "") or "")
-        if rank == "3등":
-            third_total += pz
-        elif rank == "1등":
-            has_first_winner = True
-        elif rank == "2등":
-            has_second_winner = True
+        if rank in ("1등", "2등"):
+            taxable_prize_total += pz
 
-    base_pool = max(0, total_amount - third_total)
-    tax_1 = round_half_up(base_pool * (first_pct * 0.01) * (tax_rate * 0.01)) if has_first_winner else 0
-    tax_2 = round_half_up(base_pool * (second_pct * 0.01) * (tax_rate * 0.01)) if has_second_winner else 0
-    tax_total = int(tax_1 + tax_2)
+    tax_total = round_half_up(taxable_prize_total * (tax_rate * 0.01)) if taxable_prize_total > 0 else 0
     donation = int(total_amount - prize_total - tax_total)
 
     db.collection("lottery_ledgers").add(
@@ -1330,7 +1319,29 @@ def api_list_lottery_ledgers(limit=50):
             }
         )
     return {"ok": True, "rows": rows}
-    
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def get_my_lottery_entries_cached(round_id: str, student_id: str):
+    my_entries = list(
+        db.collection("lottery_entries")
+        .where(filter=FieldFilter("round_id", "==", str(round_id or "")))
+        .where(filter=FieldFilter("student_id", "==", str(student_id or "")))
+        .stream()
+    )
+    rows = []
+    for d in my_entries:
+        x = d.to_dict() or {}
+        rows.append(
+            {
+                "회차": int(x.get("round_no", 0) or 0),
+                "참여 일시": format_kr_datetime_short_seconds(x.get("submitted_at")),
+                "복권 참여 번호": ", ".join(f"{int(n):02d}" for n in (x.get("numbers") or [])),
+                "_dt": _to_utc_datetime(x.get("submitted_at")) or datetime(1970, 1, 1, tzinfo=timezone.utc),
+            }
+        )
+    rows.sort(key=lambda r: r["_dt"])
+    return rows
 
 # =========================
 # Admin rollback
@@ -4591,7 +4602,6 @@ def render_lottery_admin():
                 table_rows.append(
                     "<tr>"
                     f"<td>{row.get('등수', '')}</td>"
-                    f"<td>{int(row.get('번호', 0) or 0)}</td>"
                     f"<td>{row.get('이름', '')}</td>"
                     f"<td>{number_html}</td>"
                     f"<td>{int(row.get('당첨금', 0) or 0)}</td>"
@@ -4602,7 +4612,6 @@ def render_lottery_admin():
                 "<table style='width:100%;border-collapse:collapse;'>"
                 "<thead><tr>"
                 "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>등수</th>"
-                "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>번호</th>"
                 "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>이름</th>"
                 "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>복권 참여 번호</th>"
                 "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>당첨금</th>"
@@ -4652,7 +4661,9 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
     st.caption(f"{round_no}회차 | 복권 가격 {price}")
 
     sel_key = f"lottery_sel_{student_id}"
+    buf_key = f"lottery_sel_buf_{student_id}"
     st.session_state.setdefault(sel_key, [])
+    st.session_state.setdefault(buf_key, [])
 
     for row in range(2):
         cols = st.columns(10)
@@ -4660,18 +4671,27 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
             n = row * 10 + i + 1
             with cols[i]:
                 selected = int(n) in set(st.session_state.get(sel_key, []))
-                label = f"[{n:02d}]" + ("✅" if selected else "")
+                pending = int(n) in set(st.session_state.get(buf_key, []))
+                label = f"[{n:02d}]" + ("✅" if selected else ("⏳" if pending else ""))
                 if st.button(label, key=f"lottery_btn_{student_id}_{n}", use_container_width=True):
-                    cur = [int(x) for x in st.session_state.get(sel_key, [])]
+                    cur = [int(x) for x in st.session_state.get(buf_key, [])]
                     if n in cur:
                         cur = [x for x in cur if x != n]
                     elif len(cur) < 4:
                         cur.append(n)
                     else:
                         st.warning("번호는 최대 4개까지 선택할 수 있습니다.")
-                    st.session_state[sel_key] = sorted(set(cur))
-
+                    cur = sorted(set(cur))
+                    if len(cur) == 4:
+                        st.session_state[sel_key] = cur
+                        st.session_state[buf_key] = []
+                    else:
+                        st.session_state[buf_key] = cur
+                        
     selected_nums = [int(x) for x in st.session_state.get(sel_key, [])]
+    pending_nums = [int(x) for x in st.session_state.get(buf_key, [])]
+    if pending_nums:
+        st.caption(f"선택 중: {len(pending_nums)}/4 (4개를 고르면 한 번에 입력됩니다)")
     box_cols = st.columns(4)
     for idx in range(4):
         with box_cols[idx]:
@@ -4683,6 +4703,7 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
     with c1:
         if st.button("숫자 초기화", use_container_width=True, key=f"lottery_reset_{student_id}"):
             st.session_state[sel_key] = []
+            st.session_state[buf_key] = []
     with c2:
         if st.button("복권 구매", use_container_width=True, key=f"lottery_buy_{student_id}"):
             if len(selected_nums) != 4:
@@ -4693,6 +4714,8 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
                 res = api_buy_lottery(name, pin, selected_nums)
                 if res.get("ok"):
                     st.session_state[sel_key] = []
+                    st.session_state[buf_key] = []
+                    get_my_lottery_entries_cached.clear()
                     st.session_state.data.setdefault(name, {})
                     st.session_state.data[name]["balance"] = int(res.get("balance", balance) or balance)
                     toast("복권 구매 완료", icon="🎟️")
@@ -4704,28 +4727,14 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
     st.markdown("### 복권 구매 내역")
     rid = str(st_info.get("round_id", "") or "")
     if rid:
-        my_entries = list(
-            db.collection("lottery_entries")
-            .where(filter=FieldFilter("round_id", "==", rid))
-            .where(filter=FieldFilter("student_id", "==", str(student_id or "")))
-            .stream()
-        )
-        rows = []
-        for d in my_entries:
-            x = d.to_dict() or {}
-            rows.append(
-                {
-                    "회차": int(x.get("round_no", 0) or 0),
-                    "참여 일시": format_kr_datetime_short_seconds(x.get("submitted_at")),
-                    "복권 참여 번호": ", ".join(f"{int(n):02d}" for n in (x.get("numbers") or [])),
-                    "_dt": _to_utc_datetime(x.get("submitted_at")) or datetime(1970, 1, 1, tzinfo=timezone.utc),
-                }
-            )
-        rows.sort(key=lambda r: r["_dt"])
+        rows = get_my_lottery_entries_cached(rid, str(student_id or ""))
         if rows:
+            view_rows = []
             for r in rows:
-                r.pop("_dt", None)
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                item = dict(r)
+                item.pop("_dt", None)
+                view_rows.append(item)
+            st.dataframe(pd.DataFrame(view_rows), use_container_width=True, hide_index=True)
         else:
             st.info("아직 구매 내역이 없습니다.")
 
@@ -5760,5 +5769,6 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
