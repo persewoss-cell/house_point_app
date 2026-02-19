@@ -4574,7 +4574,7 @@ def _format_pick_with_match(numbers: list[int], matched_numbers: list[int]) -> s
 
 def render_lottery_admin():
     st.subheader("🍀 복권")
-    st.markdown("### 복권 설정 및 개시")
+    st.markdown("### 🛠️ 복권 설정 및 개시")
 
     r1c1, r1c2, r1c3 = st.columns(3)
     with r1c1:
@@ -4618,7 +4618,7 @@ def render_lottery_admin():
         st.info("개시된 복권이 없습니다.")
 
     st.divider()
-    st.markdown("### 복권 참여 결과")
+    st.markdown("### 📝 복권 참여 결과")
     rrid = str(st_info.get("round_id", "") or "")
     if rrid:
         ent = api_list_lottery_entries(rrid)
@@ -4631,7 +4631,7 @@ def render_lottery_admin():
         st.info("(평상시) 개시된 복권이 없습니다.")
 
     st.divider()
-    st.markdown("### 복권 추첨하기")
+    st.markdown("### 🎰 복권 추첨하기")
     d1, d2, d3, d4 = st.columns(4)
     with d1:
         n1 = st.number_input("첫 번째 당첨번호", min_value=1, max_value=20, value=1, step=1, key="lt_draw_1")
@@ -4653,7 +4653,7 @@ def render_lottery_admin():
         else:
             st.error(res.get("error", "당첨번호 제출 실패"))
 
-    st.markdown("### 당첨자 확인")
+    st.markdown("### 🎉 당첨자 확인")
     if rrid:
         ws = api_get_lottery_winners(rrid)
         df_w = pd.DataFrame(ws.get("rows", [])) if ws.get("ok") else pd.DataFrame()
@@ -4729,7 +4729,7 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
             "ticket_price": int(st_info.get("price", 20) or 20),
         }
 
-    st.markdown("### 복권 구매하기")
+    st.markdown("### 🎟️ 복권 구매하기")
     if not open_round:
         st.info("(평상시) 개시된 복권이 없습니다.")
     else:
@@ -4790,7 +4790,7 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
                         st.error(res.get("error", "복권 구매 실패"))
 
     st.divider()
-    st.markdown("### 복권 구매 내역")
+    st.markdown("### 📜 복권 구매 내역")
     rid = str(st_info.get("round_id", "") or "")
     if rid:
         rows = get_my_lottery_entries_cached(rid, str(student_id or ""))
@@ -5835,6 +5835,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
