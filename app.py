@@ -5508,6 +5508,48 @@ if st.session_state.admin_ok:
 
     st.stop()
 
+    # -------------------------
+    # 📒 전체통장(사람별 통장 내역)
+    # -------------------------
+    with tabs[1]:
+        st.subheader("📒 전체통장 내역")
+        for a in filtered:
+            nm, sid = a["name"], a["student_id"]
+            sres = api_savings_list_by_student_id(sid)
+            savings = sres.get("savings", []) if sres.get("ok") else []
+            sv_total = savings_active_total(savings)
+            bal_now = int(a.get("balance", 0) or 0)
+            asset_total = bal_now + sv_total
+
+            # ✅ 직업/투자(원금/현재평가) 요약
+            _role = _get_role_name_by_student_id(str(sid))
+            _inv_text, _inv_total = _get_invest_summary_by_student_id(str(sid))
+            _inv_principal_text, _inv_principal_total = _get_invest_principal_by_student_id(str(sid))
+
+            with st.expander(
+                f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total} · 투자원금 {int(_inv_principal_total)} · 현재평가금 {int(_inv_total)}",
+                expanded=False,
+            ):
+                render_asset_summary(bal_now, savings)
+
+                # ✅ (PATCH) 전체통장에서도 직업/투자 정보를 다음 줄에 표시
+                r2 = st.columns(3)
+                r2[0].metric("직업", _role if _role else "없음")
+                r2[1].metric("투자 원금", f"{int(_inv_principal_total)}")
+                r2[2].metric("현재 평가금", f"{int(_inv_total)}")
+
+                st.markdown("### 📒 통장내역")
+                txr = api_get_txs_by_student_id(sid, limit=120)
+                if not txr.get("ok"):
+                    st.error(txr.get("error", "내역을 불러오지 못했어요."))
+                else:
+                    df_tx = pd.DataFrame(txr.get("rows", []))
+                    if df_tx.empty:
+                        st.info("거래 내역이 없어요.")
+                    else:
+                        df_tx = df_tx.sort_values("created_at_utc", ascending=False)
+                        render_tx_table(df_tx)
+
 # =========================
 # 사용자 화면
 # =========================
@@ -5568,7 +5610,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
+sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권", "📒 전체통장"])
 
 # =========================
 # 거래 탭
@@ -5799,5 +5841,6 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
