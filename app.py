@@ -4697,7 +4697,7 @@ def render_lottery_admin():
     else:
         st.info("회차 정보가 없습니다.")
 
-    st.markdown("### 복권 관리 장부")
+    st.markdown("### 📒 복권 관리 장부")
     lg = api_list_lottery_ledgers(limit=100)
     df_lg = pd.DataFrame(lg.get("rows", [])) if lg.get("ok") else pd.DataFrame()
     if df_lg.empty:
@@ -5807,6 +5807,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
