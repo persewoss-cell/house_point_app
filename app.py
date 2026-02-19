@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+from decimal import Decimal, ROUND_HALF_UP
 
 # ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
 try:
@@ -251,6 +252,10 @@ def toast(msg: str, icon: str = "✅"):
         st.toast(msg, icon=icon)
     else:
         st.success(msg)
+
+
+def round_half_up(value: float) -> int:
+    return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def is_admin_login(name: str, pin: str) -> bool:
@@ -1131,8 +1136,8 @@ def api_submit_lottery_draw(admin_pin: str, draw_numbers: list[int]):
 
     gross = int(len(entries) * price)
     base_pool = max(0, gross - third_total)
-    first_total = int(round(base_pool * (first_pct * 0.01) * (1 - tax_rate * 0.01)))
-    second_total = int(round(base_pool * (second_pct * 0.01) * (1 - tax_rate * 0.01)))
+    first_total = round_half_up(base_pool * (first_pct * 0.01) * (1 - tax_rate * 0.01))
+    second_total = round_half_up(base_pool * (second_pct * 0.01) * (1 - tax_rate * 0.01))
     first_each = int(first_total / first_count) if first_count > 0 else 0
     second_each = int(second_total / second_count) if second_count > 0 else 0
 
@@ -1188,18 +1193,15 @@ def api_get_lottery_winners(round_id: str):
         x = d.to_dict() or {}
         nums = [int(n) for n in (x.get("numbers") or [])]
         matched = set(int(n) for n in (x.get("matched_numbers") or []))
-        disp = []
-        for n in nums:
-            token = f"{n:02d}"
-            if n in matched:
-                token = f"{token}✓"
-            disp.append(token)
+        disp = [f"{n:02d}" for n in nums]
         rows.append(
             {
                 "등수": str(x.get("rank", "") or ""),
                 "번호": int(x.get("student_no", 0) or 0),
                 "이름": str(x.get("student_name", "") or ""),
                 "복권 참여 번호": ", ".join(disp),
+                "_numbers": nums,
+                "_matched": sorted(matched),
                 "당첨금": int(x.get("prize", 0) or 0),
                 "_rk": rank_key.get(str(x.get("rank", "") or ""), 9),
             }
@@ -1285,8 +1287,8 @@ def api_reflect_lottery_ledger(admin_pin: str, round_id: str):
             has_second_winner = True
 
     base_pool = max(0, total_amount - third_total)
-    tax_1 = int(round(base_pool * (first_pct * 0.01) * (tax_rate * 0.01))) if has_first_winner else 0
-    tax_2 = int(round(base_pool * (second_pct * 0.01) * (tax_rate * 0.01))) if has_second_winner else 0
+    tax_1 = round_half_up(base_pool * (first_pct * 0.01) * (tax_rate * 0.01)) if has_first_winner else 0
+    tax_2 = round_half_up(base_pool * (second_pct * 0.01) * (tax_rate * 0.01)) if has_second_winner else 0
     tax_total = int(tax_1 + tax_2)
     donation = int(total_amount - prize_total - tax_total)
 
@@ -4578,8 +4580,38 @@ def render_lottery_admin():
             draw_caption = ", ".join(f"{int(n):02d}" for n in (st_info.get("draw_numbers") or []))
             if draw_caption:
                 st.caption(f"회차 {int(st_info.get('round_no', 0))} | 당첨번호: {draw_caption}")
-            st.dataframe(df_w, use_container_width=True, hide_index=True)
+            table_rows = []
+            for _, row in df_w.iterrows():
+                nums = [int(n) for n in (row.get("_numbers") or [])]
+                matched = set(int(n) for n in (row.get("_matched") or []))
+                number_html = ", ".join(
+                    f"<span style='color:#dc2626;font-weight:700;'>{n:02d}</span>" if n in matched else f"{n:02d}"
+                    for n in nums
+                )
+                table_rows.append(
+                    "<tr>"
+                    f"<td>{row.get('등수', '')}</td>"
+                    f"<td>{int(row.get('번호', 0) or 0)}</td>"
+                    f"<td>{row.get('이름', '')}</td>"
+                    f"<td>{number_html}</td>"
+                    f"<td>{int(row.get('당첨금', 0) or 0)}</td>"
+                    "</tr>"
+                )
 
+            winners_html = (
+                "<table style='width:100%;border-collapse:collapse;'>"
+                "<thead><tr>"
+                "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>등수</th>"
+                "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>번호</th>"
+                "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>이름</th>"
+                "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>복권 참여 번호</th>"
+                "<th style='text-align:left;border-bottom:1px solid #ddd;padding:6px;'>당첨금</th>"
+                "</tr></thead>"
+                f"<tbody>{''.join(table_rows)}</tbody>"
+                "</table>"
+            )
+            st.markdown(winners_html, unsafe_allow_html=True)
+            
             if st.button("당첨금 지급 및 장부 반영", use_container_width=True, key="lottery_pay_and_ledger_btn"):
                 rp = api_pay_lottery_prizes(ADMIN_PIN, rrid)
                 if not rp.get("ok"):
@@ -5728,4 +5760,5 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
