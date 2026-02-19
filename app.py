@@ -4573,7 +4573,7 @@ def _format_pick_with_match(numbers: list[int], matched_numbers: list[int]) -> s
 
 
 def render_lottery_admin():
-    st.subheader("🎟️ 복권")
+    st.subheader("🍀 복권")
     st.markdown("### 복권 설정 및 개시")
 
     r1c1, r1c2, r1c3 = st.columns(3)
@@ -4718,7 +4718,7 @@ def render_lottery_admin():
 
 
 def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
-    st.subheader("🎟️ 복권")
+    st.subheader("🍀 복권")
     st_info = api_get_lottery_state()
     login_name = name
     login_pin = pin
@@ -4823,7 +4823,7 @@ if st.session_state.admin_ok:
         st.warning("검색 결과가 없어요.")
         st.stop()
 
-    tab_labels = ["⚙️ 설정", "📒 전체통장", "💼 직업/월급", "📈 투자"] + [f"👤 {a['name']}" for a in filtered] + ["🏷️ 경매", "🎟️ 복권"]
+    tab_labels = ["⚙️ 설정", "📒 전체통장", "💼 직업/월급", "📈 투자"] + [f"👤 {a['name']}" for a in filtered] + ["🏷️ 경매", "🍀 복권"]
     tabs = st.tabs(tab_labels)
 
     admin_pin = ADMIN_PIN
@@ -5548,7 +5548,7 @@ if st.session_state.admin_ok:
 
 
     # -------------------------
-    # 🎟️ 복권 탭 (관리자)
+    # 🍀 복권 탭 (관리자)
     # -------------------------
     with tabs[-1]:
         render_lottery_admin()
@@ -5600,7 +5600,7 @@ st.markdown(f"#### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_
 st.markdown(f"#### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
 st.markdown(f"#### 💼 직업: **{role_name}**")
 
-sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🎟️ 복권"])
+sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
 
 # =========================
 # 거래 탭
@@ -5835,6 +5835,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
