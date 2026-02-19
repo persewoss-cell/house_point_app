@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import random
 
 # ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
 try:
@@ -700,6 +701,361 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
         info_msg = f"되돌리기 제외 {len(blocked)}건(적금/이미 되돌림 등)은 건너뛰었습니다."
 
     return {"ok": True, "undone": undone, "delta": total_delta, "message": info_msg}
+
+
+# =========================
+# Auction / Lottery
+# =========================
+def api_auction_create(admin_pin: str, title: str, min_bid: int, end_at_text: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    title = str(title or "").strip()
+    min_bid = int(min_bid or 0)
+    if not title:
+        return {"ok": False, "error": "경매 제목을 입력해 주세요."}
+    if min_bid <= 0:
+        return {"ok": False, "error": "최소 입찰가는 1 이상이어야 합니다."}
+    try:
+        end_at = datetime.fromisoformat(str(end_at_text or "").strip())
+        if end_at.tzinfo is None:
+            end_at = end_at.replace(tzinfo=KST)
+    except Exception:
+        return {"ok": False, "error": "마감 일시 형식이 올바르지 않습니다."}
+
+    doc = db.collection("auctions").document()
+    doc.set(
+        {
+            "title": title,
+            "min_bid": min_bid,
+            "status": "open",
+            "end_at": end_at.isoformat(),
+            "highest_bid": 0,
+            "highest_bidder_id": "",
+            "highest_bidder_name": "",
+            "created_at": datetime.now(KST).isoformat(),
+        }
+    )
+    return {"ok": True, "auction_id": doc.id}
+
+
+def api_auction_list(limit: int = 30):
+    docs = db.collection("auctions").order_by("created_at", direction=firestore.Query.DESCENDING).limit(int(limit)).stream()
+    out = []
+    now = datetime.now(KST)
+    for d in docs:
+        x = d.to_dict() or {}
+        end_at = str(x.get("end_at", "") or "")
+        ended = False
+        try:
+            edt = datetime.fromisoformat(end_at)
+            if edt.tzinfo is None:
+                edt = edt.replace(tzinfo=KST)
+            ended = edt <= now
+        except Exception:
+            ended = False
+        out.append(
+            {
+                "auction_id": d.id,
+                "title": str(x.get("title", "") or ""),
+                "min_bid": int(x.get("min_bid", 0) or 0),
+                "status": str(x.get("status", "open") or "open"),
+                "end_at": end_at,
+                "highest_bid": int(x.get("highest_bid", 0) or 0),
+                "highest_bidder_id": str(x.get("highest_bidder_id", "") or ""),
+                "highest_bidder_name": str(x.get("highest_bidder_name", "") or ""),
+                "ended": ended,
+            }
+        )
+    return {"ok": True, "auctions": out}
+
+
+def api_auction_bid(name: str, pin: str, auction_id: str, bid_amount: int):
+    student_doc = fs_auth_student(name, pin)
+    if not student_doc:
+        return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
+    bid_amount = int(bid_amount or 0)
+    if bid_amount <= 0:
+        return {"ok": False, "error": "입찰 금액을 입력해 주세요."}
+
+    student_ref = db.collection("students").document(student_doc.id)
+    auction_ref = db.collection("auctions").document(str(auction_id))
+    bid_ref = db.collection("auction_bids").document()
+
+    @firestore.transactional
+    def _do(tx):
+        st_snap = student_ref.get(transaction=tx)
+        balance = int((st_snap.to_dict() or {}).get("balance", 0) or 0)
+        if balance < bid_amount:
+            raise ValueError("잔액보다 큰 금액은 입찰할 수 없습니다.")
+
+        a_snap = auction_ref.get(transaction=tx)
+        if not a_snap.exists:
+            raise ValueError("경매를 찾지 못했습니다.")
+        a = a_snap.to_dict() or {}
+        if str(a.get("status", "open")) != "open":
+            raise ValueError("이미 종료된 경매입니다.")
+
+        min_bid = int(a.get("min_bid", 0) or 0)
+        highest = int(a.get("highest_bid", 0) or 0)
+        if bid_amount < max(min_bid, highest + 1):
+            raise ValueError(f"입찰가는 최소 {max(min_bid, highest+1)} 포인트 이상이어야 합니다.")
+
+        end_at = datetime.fromisoformat(str(a.get("end_at", "")))
+        if end_at.tzinfo is None:
+            end_at = end_at.replace(tzinfo=KST)
+        if end_at <= datetime.now(KST):
+            raise ValueError("마감된 경매입니다. 관리자에게 종료 처리를 요청해 주세요.")
+
+        tx.update(
+            auction_ref,
+            {
+                "highest_bid": bid_amount,
+                "highest_bidder_id": student_doc.id,
+                "highest_bidder_name": name,
+            },
+        )
+        tx.set(
+            bid_ref,
+            {
+                "auction_id": str(auction_id),
+                "student_id": student_doc.id,
+                "student_name": name,
+                "bid_amount": bid_amount,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+
+    try:
+        _do(db.transaction())
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def api_auction_close(admin_pin: str, auction_id: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    auction_ref = db.collection("auctions").document(str(auction_id))
+
+    @firestore.transactional
+    def _do(tx):
+        a_snap = auction_ref.get(transaction=tx)
+        if not a_snap.exists:
+            raise ValueError("경매를 찾지 못했습니다.")
+        a = a_snap.to_dict() or {}
+        if str(a.get("status", "open")) != "open":
+            raise ValueError("이미 종료 처리된 경매입니다.")
+
+        winner_id = str(a.get("highest_bidder_id", "") or "")
+        winner_name = str(a.get("highest_bidder_name", "") or "")
+        win_bid = int(a.get("highest_bid", 0) or 0)
+
+        tx.update(
+            auction_ref,
+            {
+                "status": "closed",
+                "closed_at": datetime.now(KST).isoformat(),
+            },
+        )
+
+        if winner_id and win_bid > 0:
+            st_ref = db.collection("students").document(winner_id)
+            st_snap = st_ref.get(transaction=tx)
+            if not st_snap.exists:
+                raise ValueError("낙찰자 계정을 찾지 못했습니다.")
+            bal = int((st_snap.to_dict() or {}).get("balance", 0) or 0)
+            new_bal = bal - win_bid
+            tx.update(st_ref, {"balance": new_bal})
+            tx.set(
+                db.collection("transactions").document(),
+                {
+                    "student_id": winner_id,
+                    "type": "withdraw",
+                    "amount": -win_bid,
+                    "balance_after": new_bal,
+                    "memo": f"경매 낙찰: {str(a.get('title','경매'))}",
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                },
+            )
+        return winner_name, win_bid
+
+    try:
+        winner_name, win_bid = _do(db.transaction())
+        return {"ok": True, "winner_name": winner_name, "win_bid": win_bid}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def api_lottery_create_round(admin_pin: str, title: str, ticket_price: int):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    title = str(title or "").strip() or f"복권 {date.today().isoformat()}"
+    ticket_price = int(ticket_price or 0)
+    if ticket_price <= 0:
+        return {"ok": False, "error": "복권 가격은 1 이상이어야 합니다."}
+
+    open_rounds = db.collection("lottery_rounds").where(filter=FieldFilter("status", "==", "open")).limit(1).stream()
+    if list(open_rounds):
+        return {"ok": False, "error": "이미 진행 중인 복권 회차가 있습니다."}
+
+    ref = db.collection("lottery_rounds").document()
+    ref.set(
+        {
+            "title": title,
+            "ticket_price": ticket_price,
+            "status": "open",
+            "pot": 0,
+            "ticket_count": 0,
+            "created_at": datetime.now(KST).isoformat(),
+        }
+    )
+    return {"ok": True, "round_id": ref.id}
+
+
+def api_lottery_get_open_round():
+    docs = db.collection("lottery_rounds").where(filter=FieldFilter("status", "==", "open")).limit(1).stream()
+    lst = list(docs)
+    if not lst:
+        return {"ok": True, "round": None}
+    d = lst[0]
+    x = d.to_dict() or {}
+    return {
+        "ok": True,
+        "round": {
+            "round_id": d.id,
+            "title": str(x.get("title", "") or ""),
+            "ticket_price": int(x.get("ticket_price", 0) or 0),
+            "pot": int(x.get("pot", 0) or 0),
+            "ticket_count": int(x.get("ticket_count", 0) or 0),
+        },
+    }
+
+
+def api_lottery_buy_tickets(name: str, pin: str, round_id: str, qty: int):
+    student_doc = fs_auth_student(name, pin)
+    if not student_doc:
+        return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
+    qty = int(qty or 0)
+    if qty <= 0:
+        return {"ok": False, "error": "구매 수량은 1 이상이어야 합니다."}
+
+    st_ref = db.collection("students").document(student_doc.id)
+    rd_ref = db.collection("lottery_rounds").document(str(round_id))
+    tx_ref = db.collection("transactions").document()
+
+    @firestore.transactional
+    def _do(tx):
+        rd_snap = rd_ref.get(transaction=tx)
+        if not rd_snap.exists:
+            raise ValueError("복권 회차를 찾지 못했습니다.")
+        rd = rd_snap.to_dict() or {}
+        if str(rd.get("status", "open")) != "open":
+            raise ValueError("종료된 복권 회차입니다.")
+        price = int(rd.get("ticket_price", 0) or 0)
+        cost = price * qty
+
+        st_snap = st_ref.get(transaction=tx)
+        bal = int((st_snap.to_dict() or {}).get("balance", 0) or 0)
+        if bal < cost:
+            raise ValueError("잔액이 부족합니다.")
+        new_bal = bal - cost
+
+        tx.update(st_ref, {"balance": new_bal})
+        tx.update(rd_ref, {"pot": int(rd.get("pot", 0) or 0) + cost, "ticket_count": int(rd.get("ticket_count", 0) or 0) + qty})
+        tx.set(
+            tx_ref,
+            {
+                "student_id": student_doc.id,
+                "type": "withdraw",
+                "amount": -cost,
+                "balance_after": new_bal,
+                "memo": f"복권 구매({qty}장)",
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        for _ in range(qty):
+            tx.set(
+                db.collection("lottery_tickets").document(),
+                {
+                    "round_id": str(round_id),
+                    "student_id": student_doc.id,
+                    "student_name": name,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                },
+            )
+
+    try:
+        _do(db.transaction())
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def api_lottery_draw(admin_pin: str, round_id: str, payout_rate: float = 0.7):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    rd_ref = db.collection("lottery_rounds").document(str(round_id))
+
+    tickets = list(db.collection("lottery_tickets").where(filter=FieldFilter("round_id", "==", str(round_id))).stream())
+    if not tickets:
+        try:
+            rd_ref.update({"status": "closed", "closed_at": datetime.now(KST).isoformat()})
+        except Exception:
+            pass
+        return {"ok": True, "winner": None, "prize": 0}
+
+    winner_doc = random.choice(tickets)
+    winner = winner_doc.to_dict() or {}
+    winner_id = str(winner.get("student_id", "") or "")
+    winner_name = str(winner.get("student_name", "") or "")
+
+    @firestore.transactional
+    def _do(tx):
+        rd_snap = rd_ref.get(transaction=tx)
+        if not rd_snap.exists:
+            raise ValueError("복권 회차를 찾지 못했습니다.")
+        rd = rd_snap.to_dict() or {}
+        if str(rd.get("status", "open")) != "open":
+            raise ValueError("이미 종료된 회차입니다.")
+        pot = int(rd.get("pot", 0) or 0)
+        prize = int(round(pot * float(payout_rate)))
+
+        tx.update(
+            rd_ref,
+            {
+                "status": "closed",
+                "closed_at": datetime.now(KST).isoformat(),
+                "winner_id": winner_id,
+                "winner_name": winner_name,
+                "prize": prize,
+            },
+        )
+
+        if winner_id and prize > 0:
+            st_ref = db.collection("students").document(winner_id)
+            st_snap = st_ref.get(transaction=tx)
+            if st_snap.exists:
+                bal = int((st_snap.to_dict() or {}).get("balance", 0) or 0)
+                new_bal = bal + prize
+                tx.update(st_ref, {"balance": new_bal})
+                tx.set(
+                    db.collection("transactions").document(),
+                    {
+                        "student_id": winner_id,
+                        "type": "deposit",
+                        "amount": prize,
+                        "balance_after": new_bal,
+                        "memo": f"복권 당첨: {str(rd.get('title', '복권'))}",
+                        "created_at": firestore.SERVER_TIMESTAMP,
+                    },
+                )
+        return prize
+
+    try:
+        prize = _do(db.transaction())
+        return {"ok": True, "winner": winner_name, "prize": prize}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # =========================
@@ -4209,6 +4565,70 @@ if st.session_state.admin_ok:
 
         st.divider()
 
+        st.markdown("### 🎁 경매/복권 관리")
+
+        with st.expander("🏷️ 경매 생성", expanded=False):
+            auc_title = st.text_input("경매 제목", key="auc_title_admin")
+            auc_min = st.number_input("최소 입찰가", min_value=1, step=1, value=100, key="auc_min_admin")
+            auc_end = st.text_input("마감시각(예: 2026-01-01T18:00:00+09:00)", value=(datetime.now(KST)+timedelta(days=1)).replace(microsecond=0).isoformat(), key="auc_end_admin")
+            if st.button("경매 열기", key="auc_create_btn", use_container_width=True):
+                r = api_auction_create(admin_pin, auc_title, int(auc_min), auc_end)
+                if r.get("ok"):
+                    toast("경매를 생성했어요.", icon="🏷️")
+                    st.rerun()
+                else:
+                    st.error(r.get("error", "경매 생성 실패"))
+
+        ares = api_auction_list(limit=20)
+        auctions = ares.get("auctions", []) if ares.get("ok") else []
+        for a in auctions[:10]:
+            line = f"{a['title']} | 현재최고 {a['highest_bid']} | 상태 {a['status']} | 마감 {a['end_at']}"
+            c1, c2 = st.columns([4,1])
+            c1.caption(line)
+            if c2.button("종료", key=f"auc_close_{a['auction_id']}", disabled=(a.get("status") != "open"), use_container_width=True):
+                rr = api_auction_close(admin_pin, a["auction_id"])
+                if rr.get("ok"):
+                    if rr.get("winner_name"):
+                        toast(f"종료 완료! 낙찰자 {rr['winner_name']} ({rr.get('win_bid',0)}포인트)", icon="🏁")
+                    else:
+                        toast("입찰 없이 종료되었습니다.", icon="🏁")
+                    api_list_accounts_cached.clear()
+                    st.rerun()
+                else:
+                    st.error(rr.get("error", "경매 종료 실패"))
+
+        st.divider()
+        with st.expander("🎟️ 복권 회차 관리", expanded=False):
+            ltitle = st.text_input("회차 이름", key="lot_title_admin", value=f"복권 {date.today().isoformat()}")
+            lprice = st.number_input("복권 1장 가격", min_value=1, step=1, value=10, key="lot_price_admin")
+            if st.button("복권 회차 시작", key="lot_create_btn", use_container_width=True):
+                r = api_lottery_create_round(admin_pin, ltitle, int(lprice))
+                if r.get("ok"):
+                    toast("복권 회차를 시작했습니다.", icon="🎟️")
+                    st.rerun()
+                else:
+                    st.error(r.get("error", "복권 회차 생성 실패"))
+
+            open_round_res = api_lottery_get_open_round()
+            rd = open_round_res.get("round") if open_round_res.get("ok") else None
+            if rd:
+                st.info(f"진행중: {rd['title']} | 가격 {rd['ticket_price']} | 누적 {rd['pot']} | 티켓 {rd['ticket_count']}장")
+                if st.button("당첨 추첨 및 종료", key="lot_draw_btn", use_container_width=True):
+                    dr = api_lottery_draw(admin_pin, rd["round_id"], payout_rate=0.7)
+                    if dr.get("ok"):
+                        if dr.get("winner"):
+                            toast(f"당첨: {dr['winner']} (+{dr.get('prize',0)}포인트)", icon="🎉")
+                        else:
+                            toast("구매자가 없어 종료되었습니다.", icon="🎟️")
+                        api_list_accounts_cached.clear()
+                        st.rerun()
+                    else:
+                        st.error(dr.get("error", "추첨 실패"))
+            else:
+                st.caption("현재 진행 중인 복권 회차가 없습니다.")
+
+        st.divider()
+
         # -------------------------------------------------
         # 4) PIN 재설정 (맨 아래)
         # -------------------------------------------------
@@ -4402,7 +4822,7 @@ st.markdown(f"#### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_
 st.markdown(f"#### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
 st.markdown(f"#### 💼 직업: **{role_name}**")
 
-sub1, sub2, sub_invest, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표"])
+sub1, sub2, sub_invest, sub_event, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎁 경매/복권", "🎯 목표"])
 
 # =========================
 # 거래 탭
@@ -4580,6 +5000,50 @@ with sub_invest:
 
 
 # =========================
+# 경매/복권 탭
+# =========================
+with sub_event:
+    st.subheader("🎁 경매/복권")
+
+    st.markdown("#### 🏷️ 진행 중 경매")
+    ares_user = api_auction_list(limit=20)
+    auctions_user = [a for a in (ares_user.get("auctions", []) if ares_user.get("ok") else []) if a.get("status") == "open"]
+    if not auctions_user:
+        st.caption("진행 중인 경매가 없습니다.")
+    else:
+        for a in auctions_user:
+            st.markdown(f"- **{a['title']}** | 최소 {a['min_bid']} | 현재최고 {a['highest_bid']}({a.get('highest_bidder_name') or '-'}) | 마감 {a['end_at']}")
+            bid_key = f"bid_amt_{a['auction_id']}_{name}"
+            bid_amt = st.number_input("입찰 금액", min_value=max(int(a.get('min_bid', 1)), int(a.get('highest_bid', 0)) + 1), step=1, key=bid_key)
+            if st.button("입찰", key=f"bid_btn_{a['auction_id']}_{name}", use_container_width=True):
+                br = api_auction_bid(name, pin, a["auction_id"], int(bid_amt))
+                if br.get("ok"):
+                    toast("입찰 완료!", icon="🏷️")
+                    st.rerun()
+                else:
+                    st.error(br.get("error", "입찰 실패"))
+            st.divider()
+
+    st.markdown("#### 🎟️ 복권")
+    rd_res = api_lottery_get_open_round()
+    rd = rd_res.get("round") if rd_res.get("ok") else None
+    if not rd:
+        st.caption("현재 진행 중인 복권 회차가 없습니다.")
+    else:
+        st.info(f"{rd['title']} | 1장 {rd['ticket_price']}포인트 | 누적상금풀 {rd['pot']} | 총티켓 {rd['ticket_count']}장")
+        qty = st.number_input("구매 수량", min_value=1, step=1, value=1, key=f"lot_qty_{name}")
+        total_cost = int(rd['ticket_price']) * int(qty)
+        st.caption(f"구매 금액: {total_cost} 포인트")
+        if st.button("복권 구매", key=f"lot_buy_btn_{name}", use_container_width=True):
+            lr = api_lottery_buy_tickets(name, pin, rd["round_id"], int(qty))
+            if lr.get("ok"):
+                toast("복권 구매 완료!", icon="🎟️")
+                refresh_account_data(name, pin, force=True)
+                st.rerun()
+            else:
+                st.error(lr.get("error", "복권 구매 실패"))
+
+# =========================
 # 목표 탭
 # =========================
 with sub3:
@@ -4590,4 +5054,3 @@ with sub3:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
-
