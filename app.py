@@ -5279,15 +5279,8 @@ if st.session_state.admin_ok:
 
         with setting_tabs[1]:
             st.markdown("### 🧾 개인 지급/벌금")
-
-            memo_sel, dep_sel, wd_sel = render_admin_trade_ui(
-                prefix="admin_selected_onebox",
-                templates_list=TEMPLATES,
-                template_by_display=TEMPLATE_BY_DISPLAY,
-                show_quick_amount=False,
-            )
-
-            st.markdown("#### 대상학생 선택")
+            
+            st.markdown("#### 👥 대상학생 선택")
             selected_ids = []
             for idx in range(0, len(filtered), 5):
                 row = st.columns(5)
@@ -5297,6 +5290,13 @@ if st.session_state.admin_ok:
                     with col:
                         if st.checkbox(nm, key=f"admin_sel_student_{sid}"):
                             selected_ids.append(sid)
+            
+            memo_sel, dep_sel, wd_sel = render_admin_trade_ui(
+                prefix="admin_selected_onebox",
+                templates_list=TEMPLATES,
+                template_by_display=TEMPLATE_BY_DISPLAY,
+                show_quick_amount=False,
+            )
 
             if st.button("개인 지급/벌금 저장", key="admin_selected_save", use_container_width=True):
                 if not memo_sel:
@@ -5798,3 +5798,4 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
