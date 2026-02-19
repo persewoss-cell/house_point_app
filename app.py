@@ -897,6 +897,18 @@ def _lottery_state_ref():
     return db.collection("config").document("lottery_state")
 
 
+def _normalize_lottery_numbers(nums) -> list[int]:
+    out = []
+    for n in (nums or []):
+        try:
+            x = int(n)
+        except Exception:
+            continue
+        if 1 <= x <= 20:
+            out.append(x)
+    return sorted(list(dict.fromkeys(out)))
+
+
 def api_get_lottery_state():
     snap = _lottery_state_ref().get()
     if not snap.exists:
@@ -986,46 +998,92 @@ def api_buy_lottery(name: str, pin: str, numbers: list[int]):
     student_doc = fs_auth_student(name, pin)
     if not student_doc:
         return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
-    nums = sorted({int(x) for x in (numbers or [])})
-    if len(nums) != 4 or any(n < 1 or n > 20 for n in nums):
-        return {"ok": False, "error": "1~20에서 중복 없이 4개 번호를 선택해 주세요."}
+
+    nums = _normalize_lottery_numbers(numbers)
+    if len(nums) != 4:
+        return {"ok": False, "error": "1~20 숫자 중 중복 없이 4개를 선택해 주세요."}
 
     st_info = api_get_lottery_state()
-    if not st_info.get("active"):
-        return {"ok": False, "error": "진행 중인 복권이 없습니다."}
-
-    round_id = st_info.get("round_id")
+    round_id = str(st_info.get("round_id", "") or "")
     round_no = int(st_info.get("round_no", 0) or 0)
     price = int(st_info.get("price", 20) or 20)
 
+    if round_id:
+        round_snap = db.collection("lottery_rounds").document(round_id).get()
+        if round_snap.exists:
+            round_row = round_snap.to_dict() or {}
+            if str(round_row.get("status", "")).strip() == "open":
+                round_no = int(round_row.get("round_no", round_no) or round_no)
+                price = int(round_row.get("price", round_row.get("ticket_price", price)) or price)
+            else:
+                round_id = ""
+
+    if not round_id:
+        try:
+            q = (
+                db.collection("lottery_rounds")
+                .where(filter=FieldFilter("status", "==", "open"))
+                .order_by("round_no", direction=firestore.Query.DESCENDING)
+                .limit(1)
+                .stream()
+            )
+            for d in q:
+                row = d.to_dict() or {}
+                round_id = d.id
+                round_no = int(row.get("round_no", 0) or 0)
+                price = int(row.get("price", row.get("ticket_price", 20)) or 20)
+                break
+        except FailedPrecondition:
+            q = db.collection("lottery_rounds").where(filter=FieldFilter("status", "==", "open")).stream()
+            best_row = None
+            for d in q:
+                row = d.to_dict() or {}
+                this_no = int(row.get("round_no", 0) or 0)
+                if (best_row is None) or (this_no > int(best_row.get("round_no", 0) or 0)):
+                    best_row = {"id": d.id, "round_no": this_no, "price": int(row.get("price", row.get("ticket_price", 20)) or 20)}
+            if best_row:
+                round_id = str(best_row.get("id", "") or "")
+                round_no = int(best_row.get("round_no", 0) or 0)
+                price = int(best_row.get("price", 20) or 20)
+
+    if not round_id:
+        return {"ok": False, "error": "개시된 복권이 없습니다."}
+    if price <= 0:
+        return {"ok": False, "error": "복권 가격 설정이 올바르지 않습니다."}
+
     student_id = student_doc.id
     student_ref = db.collection("students").document(student_id)
+    round_ref = db.collection("lottery_rounds").document(round_id)
     tx_ref = db.collection("transactions").document()
     entry_ref = db.collection("lottery_entries").document()
-    memo = f"복권 {round_no}회차 구매"
 
     @firestore.transactional
     def _do(transaction):
-        state_snap = _lottery_state_ref().get(transaction=transaction)
-        state = state_snap.to_dict() or {}
-        if not bool(state.get("active", False)) or str(state.get("round_id", "")) != str(round_id):
-            raise ValueError("복권이 마감되었거나 회차가 변경되었습니다.")
+        r_snap = round_ref.get(transaction=transaction)
+        if not r_snap.exists:
+            raise ValueError("복권 회차를 찾지 못했습니다.")
+        r = r_snap.to_dict() or {}
+        if str(r.get("status", "")) != "open":
+            raise ValueError("마감된 복권은 구매할 수 없습니다.")
 
         st_snap = student_ref.get(transaction=transaction)
-        bal = int((st_snap.to_dict() or {}).get("balance", 0) or 0)
+        if not st_snap.exists:
+            raise ValueError("학생 계정을 찾지 못했습니다.")
+        s = st_snap.to_dict() or {}
+        bal = int(s.get("balance", 0) or 0)
         if bal < price:
-            raise ValueError("통장 잔액이 부족합니다.")
+            raise ValueError("잔액이 부족하여 복권을 구매할 수 없습니다.")
 
-        new_bal = bal - price
+        new_bal = int(bal - price)
         transaction.update(student_ref, {"balance": new_bal})
         transaction.set(
             tx_ref,
             {
                 "student_id": student_id,
-                "type": "lottery_buy",
+                "type": "withdraw",
                 "amount": -int(price),
                 "balance_after": int(new_bal),
-                "memo": memo,
+                "memo": f"복권 {int(round_no)}회 구매",
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -1035,10 +1093,11 @@ def api_buy_lottery(name: str, pin: str, numbers: list[int]):
                 "round_id": str(round_id),
                 "round_no": int(round_no),
                 "student_id": student_id,
-                "student_no": int(_get_student_no(student_id)),
-                "student_name": str((student_doc.to_dict() or {}).get("name", name) or name),
+                "student_no": int(s.get("no", 0) or 0),
+                "student_name": str(s.get("name", "") or name),
                 "numbers": nums,
                 "submitted_at": firestore.SERVER_TIMESTAMP,
+                "ticket_price": int(price),
             },
         )
         return new_bal
@@ -5769,6 +5828,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
