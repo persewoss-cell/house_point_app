@@ -4573,7 +4573,6 @@ def _format_pick_with_match(numbers: list[int], matched_numbers: list[int]) -> s
 
 
 def render_lottery_admin():
-    st.subheader("🍀 복권")
     st.markdown("### 🛠️ 복권 설정 및 개시")
 
     r1c1, r1c2, r1c3 = st.columns(3)
@@ -4718,7 +4717,6 @@ def render_lottery_admin():
 
 
 def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
-    st.subheader("🍀 복권")
     st_info = api_get_lottery_state()
     login_name = name
     login_pin = pin
@@ -4833,7 +4831,6 @@ if st.session_state.admin_ok:
     # ⚙️ 설정 탭
     # -------------------------
     with tabs[0]:
-        st.subheader("⚙️ 설정")
 
         # -------------------------------------------------
         # 1) ✅ 전체 일괄 지급/벌금 (단일 UI로 통일)
@@ -5430,7 +5427,6 @@ if st.session_state.admin_ok:
     # 🏷️ 경매 탭 (관리자)
     # -------------------------
     with tabs[-2]:
-        st.subheader("🏷️ 경매")
 
         st.markdown("### 📢 경매 개시")
         bid_title_admin = st.text_input("입찰 내역", key="auction_admin_bid_title").strip()
@@ -5738,7 +5734,7 @@ with sub1:
 # 적금 탭
 # =========================
 with sub2:
-    st.subheader("💰 적금")
+    st.subheader("💰 적금 넣기")
 
     p = st.number_input("적금 원금(10단위)", min_value=10, step=10, value=100, key=f"sv_p_{name}")
     w = st.selectbox("기간(1~10주)", list(range(1, 11)), index=4, key=f"sv_w_{name}")
@@ -5791,7 +5787,7 @@ with sub3:
 # 경매 탭
 # =========================
 with sub4:
-    st.subheader("🏷️ 경매")
+    st.subheader("🏷️ 경매 참하기")
     ast = api_get_auction_state()
 
     if not ast.get("active"):
@@ -5833,4 +5829,5 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
