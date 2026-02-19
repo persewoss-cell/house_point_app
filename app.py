@@ -4804,7 +4804,7 @@ if st.session_state.admin_ok:
 
     filtered = accounts
 
-    tab_labels = ["⚙️ 설정", "👥 개별 조회", "💼 직업/월급", "📈 투자", "🏷️ 경매", "🍀 복권"]
+    tab_labels = ["⚙️ 설정", "👥 개별 조회", "💼 직업/월급", "📈 투자", "🏷️ 경매", "🍀 복권", "📒 전체통장"]
     tabs = st.tabs(tab_labels)
 
     admin_pin = ADMIN_PIN
@@ -5510,8 +5510,8 @@ if st.session_state.admin_ok:
 
     # -------------------------
     # 📒 전체통장(사람별 통장 내역)
-    # -------------------------
-    with tabs[1]:
+    # -------------------------␊
+    with tabs[6]:
         st.subheader("📒 전체통장 내역")
         for a in filtered:
             nm, sid = a["name"], a["student_id"]
@@ -5550,6 +5550,8 @@ if st.session_state.admin_ok:
                         df_tx = df_tx.sort_values("created_at_utc", ascending=False)
                         render_tx_table(df_tx)
 
+    st.stop()
+    
 # =========================
 # 사용자 화면
 # =========================
@@ -5610,7 +5612,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권", "📒 전체통장"])
+sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
 
 # =========================
 # 거래 탭
@@ -5841,6 +5843,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
