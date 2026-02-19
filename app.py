@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 
 # ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
 try:
@@ -276,6 +277,19 @@ def format_kr_datetime(val) -> str:
     hour12 = 12 if hour12 == 0 else hour12
     dow_txt = f"({dow})" if dow else ""
     return f"{dt.year}년 {dt.month:02d}월 {dt.day:02d}일{dow_txt} {ampm} {hour12:02d}시 {dt.minute:02d}분"
+
+
+def format_kr_datetime_seconds(val) -> str:
+    if val is None or val == "":
+        return ""
+    dt_utc = _to_utc_datetime(val)
+    if dt_utc is None:
+        return str(val)
+    dt = dt_utc.astimezone(KST)
+    ampm = "오전" if dt.hour < 12 else "오후"
+    hour12 = dt.hour % 12
+    hour12 = 12 if hour12 == 0 else hour12
+    return f"{dt.year}년 {dt.month:02d}월 {dt.day:02d}일 {ampm} {hour12:d}시 {dt.minute:02d}분 {dt.second:02d}초"
 
 
 def _to_utc_datetime(ts):
@@ -585,6 +599,271 @@ def api_get_balance(name, pin):
     data = student_doc.to_dict() or {}
     return {"ok": True, "balance": int(data.get("balance", 0) or 0), "student_id": student_doc.id}
 
+
+# =========================
+# Auction
+# =========================
+def _auction_state_ref():
+    return db.collection("config").document("auction_state")
+
+
+def _get_student_no(student_id: str) -> int:
+    if not student_id:
+        return 0
+    snap = db.collection("students").document(student_id).get()
+    if not snap.exists:
+        return 0
+    s = snap.to_dict() or {}
+    try:
+        return int(s.get("no", 0) or 0)
+    except Exception:
+        return 0
+
+
+def api_get_auction_state():
+    snap = _auction_state_ref().get()
+    if not snap.exists:
+        return {"ok": True, "active": False}
+    d = snap.to_dict() or {}
+    return {
+        "ok": True,
+        "active": bool(d.get("active", False)),
+        "round_id": d.get("round_id"),
+        "round_no": int(d.get("round_no", 0) or 0),
+        "bid_title": str(d.get("bid_title", "") or ""),
+        "opened_at": d.get("opened_at"),
+    }
+
+
+def _next_auction_round_no() -> int:
+    q = db.collection("auction_rounds").order_by("round_no", direction=firestore.Query.DESCENDING).limit(1).stream()
+    docs = list(q)
+    if not docs:
+        return 1
+    top = docs[0].to_dict() or {}
+    return int(top.get("round_no", 0) or 0) + 1
+
+
+def api_start_auction(admin_pin: str, bid_title: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    title = str(bid_title or "").strip()
+    if not title:
+        return {"ok": False, "error": "입찰 내역을 입력해 주세요."}
+
+    cur = api_get_auction_state()
+    if cur.get("active"):
+        return {"ok": False, "error": "이미 진행 중인 경매가 있습니다."}
+
+    round_no = _next_auction_round_no()
+    opened_at = firestore.SERVER_TIMESTAMP
+    round_ref = db.collection("auction_rounds").document()
+    round_ref.set(
+        {
+            "round_no": int(round_no),
+            "bid_title": title,
+            "status": "open",
+            "opened_at": opened_at,
+            "closed_at": None,
+            "ledger_reflected": False,
+        }
+    )
+
+    _auction_state_ref().set(
+        {
+            "active": True,
+            "round_id": round_ref.id,
+            "round_no": int(round_no),
+            "bid_title": title,
+            "opened_at": opened_at,
+        }
+    )
+    return {"ok": True, "round_no": int(round_no), "round_id": round_ref.id}
+
+
+def api_submit_bid(name: str, pin: str, amount: int):
+    student_doc = fs_auth_student(name, pin)
+    if not student_doc:
+        return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
+
+    bid_amount = int(amount or 0)
+    if bid_amount <= 0:
+        return {"ok": False, "error": "입찰 가격은 1 이상이어야 합니다."}
+
+    st_info = api_get_auction_state()
+    if not st_info.get("active"):
+        return {"ok": False, "error": "진행 중인 경매가 없습니다."}
+
+    round_id = st_info.get("round_id")
+    round_no = int(st_info.get("round_no", 0) or 0)
+    if not round_id or round_no <= 0:
+        return {"ok": False, "error": "경매 정보가 올바르지 않습니다."}
+
+    student_id = student_doc.id
+    student_ref = db.collection("students").document(student_id)
+    bid_ref = db.collection("auction_bids").document(f"{round_id}_{student_id}")
+    tx_ref = db.collection("transactions").document()
+    memo = f"경매 입찰 {round_no:02d}회차"
+
+    @firestore.transactional
+    def _do(transaction):
+        state_snap = _auction_state_ref().get(transaction=transaction)
+        state = state_snap.to_dict() or {}
+        if not bool(state.get("active", False)) or state.get("round_id") != round_id:
+            raise ValueError("경매가 이미 마감되었거나 변경되었습니다.")
+
+        existing = bid_ref.get(transaction=transaction)
+        if existing.exists:
+            raise ValueError("이미 제출한 입찰표가 있습니다.")
+
+        st_snap = student_ref.get(transaction=transaction)
+        bal = int((st_snap.to_dict() or {}).get("balance", 0) or 0)
+        if bal < bid_amount:
+            raise ValueError("통장 잔액이 부족합니다.")
+
+        new_bal = bal - bid_amount
+        transaction.update(student_ref, {"balance": new_bal})
+        transaction.set(
+            tx_ref,
+            {
+                "student_id": student_id,
+                "type": "auction_bid",
+                "amount": -int(bid_amount),
+                "balance_after": int(new_bal),
+                "memo": memo,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+
+        transaction.set(
+            bid_ref,
+            {
+                "round_id": round_id,
+                "round_no": int(round_no),
+                "student_id": student_id,
+                "student_name": str((student_doc.to_dict() or {}).get("name", name) or name),
+                "student_no": int(_get_student_no(student_id)),
+                "amount": int(bid_amount),
+                "submitted_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return new_bal
+
+    try:
+        new_bal = _do(db.transaction())
+        return {"ok": True, "balance": int(new_bal)}
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"입찰표 제출 실패: {e}"}
+
+
+def api_close_auction(admin_pin: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    st_info = api_get_auction_state()
+    if not st_info.get("active"):
+        return {"ok": False, "error": "진행 중인 경매가 없습니다."}
+
+    round_id = st_info.get("round_id")
+    round_ref = db.collection("auction_rounds").document(round_id)
+    round_ref.update({"status": "closed", "closed_at": firestore.SERVER_TIMESTAMP})
+    _auction_state_ref().set({"active": False, "round_id": None, "round_no": None, "bid_title": "", "opened_at": None})
+    return {"ok": True}
+
+
+def api_get_auction_results(round_id: str):
+    if not round_id:
+        return {"ok": False, "error": "round_id가 없습니다."}
+
+    round_snap = db.collection("auction_rounds").document(round_id).get()
+    if not round_snap.exists:
+        return {"ok": False, "error": "경매 회차 정보를 찾을 수 없습니다."}
+    rd = round_snap.to_dict() or {}
+
+    q = db.collection("auction_bids").where(filter=FieldFilter("round_id", "==", round_id)).stream()
+    rows = []
+    for d in q:
+        x = d.to_dict() or {}
+        dt_utc = _to_utc_datetime(x.get("submitted_at"))
+        rows.append(
+            {
+                "입찰 가격": int(x.get("amount", 0) or 0),
+                "입찰일시": format_kr_datetime_seconds(dt_utc) if dt_utc else "",
+                "_dt": dt_utc,
+                "번호": int(x.get("student_no", 0) or 0),
+                "이름": str(x.get("student_name", "") or ""),
+            }
+        )
+
+    rows.sort(key=lambda r: (-int(r["입찰 가격"]), r["_dt"] or datetime.max.replace(tzinfo=timezone.utc)))
+    for r in rows:
+        r.pop("_dt", None)
+
+    return {
+        "ok": True,
+        "round": {
+            "round_id": round_id,
+            "round_no": int(rd.get("round_no", 0) or 0),
+            "bid_title": str(rd.get("bid_title", "") or ""),
+            "opened_at": rd.get("opened_at"),
+            "closed_at": rd.get("closed_at"),
+            "ledger_reflected": bool(rd.get("ledger_reflected", False)),
+        },
+        "rows": rows,
+    }
+
+
+def api_reflect_auction_ledger(admin_pin: str, round_id: str):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+    if not round_id:
+        return {"ok": False, "error": "경매 회차가 없습니다."}
+
+    round_ref = db.collection("auction_rounds").document(round_id)
+    round_snap = round_ref.get()
+    if not round_snap.exists:
+        return {"ok": False, "error": "경매 회차를 찾을 수 없습니다."}
+    rd = round_snap.to_dict() or {}
+    if bool(rd.get("ledger_reflected", False)):
+        return {"ok": False, "error": "이미 장부에 반영된 경매입니다."}
+
+    bids = list(db.collection("auction_bids").where(filter=FieldFilter("round_id", "==", round_id)).stream())
+    total = 0
+    for b in bids:
+        total += int((b.to_dict() or {}).get("amount", 0) or 0)
+
+    db.collection("auction_ledgers").add(
+        {
+            "round_id": round_id,
+            "round_no": int(rd.get("round_no", 0) or 0),
+            "bid_title": str(rd.get("bid_title", "") or ""),
+            "bid_date": rd.get("opened_at"),
+            "participants": len(bids),
+            "total_amount": int(total),
+            "created_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    round_ref.update({"ledger_reflected": True, "ledger_reflected_at": firestore.SERVER_TIMESTAMP})
+    return {"ok": True}
+
+
+def api_list_auction_ledgers(limit=50):
+    q = db.collection("auction_ledgers").order_by("round_no", direction=firestore.Query.DESCENDING).limit(int(limit)).stream()
+    rows = []
+    for d in q:
+        x = d.to_dict() or {}
+        rows.append(
+            {
+                "입찰번호": int(x.get("round_no", 0) or 0),
+                "입찰기일": format_kr_datetime_seconds(x.get("bid_date")),
+                "입찰내역": str(x.get("bid_title", "") or ""),
+                "입찰 참가수": int(x.get("participants", 0) or 0),
+                "총 액수": int(x.get("total_amount", 0) or 0),
+            }
+        )
+    return {"ok": True, "rows": rows}
+    
 
 # =========================
 # Admin rollback
@@ -3752,7 +4031,7 @@ if st.session_state.admin_ok:
         st.warning("검색 결과가 없어요.")
         st.stop()
 
-    tab_labels = ["⚙️ 설정", "📒 전체통장", "💼 직업/월급", "📈 투자"] + [f"👤 {a['name']}" for a in filtered]
+    tab_labels = ["⚙️ 설정", "📒 전체통장", "💼 직업/월급", "📈 투자"] + [f"👤 {a['name']}" for a in filtered] + ["🏷️ 경매"]
     tabs = st.tabs(tab_labels)
 
     admin_pin = ADMIN_PIN
@@ -4354,6 +4633,100 @@ if st.session_state.admin_ok:
             # 목표저금 조회
             st.divider()
             render_goal_readonly_admin(student_id=sid, balance_now=bal_now, savings=savings)
+            
+    # -------------------------
+    # 🏷️ 경매 탭 (관리자)
+    # -------------------------
+    with tabs[-1]:
+        st.subheader("🏷️ 경매")
+
+        st.markdown("### 경매 개시")
+        bid_title_admin = st.text_input("입찰 내역", key="auction_admin_bid_title").strip()
+        c_a1, c_a2 = st.columns(2)
+        with c_a1:
+            if st.button("개시", key="auction_start_btn", use_container_width=True):
+                res = api_start_auction(ADMIN_PIN, bid_title_admin)
+                if res.get("ok"):
+                    toast(f"경매 {int(res.get('round_no', 0)):02d}회차 개시", icon="🏁")
+                    st.rerun()
+                else:
+                    st.error(res.get("error", "경매 개시 실패"))
+        with c_a2:
+            if st.button("마감", key="auction_close_btn", use_container_width=True):
+                res = api_close_auction(ADMIN_PIN)
+                if res.get("ok"):
+                    toast("경매 마감 완료", icon="✅")
+                    st.rerun()
+                else:
+                    st.error(res.get("error", "경매 마감 실패"))
+
+        ast = api_get_auction_state()
+        if ast.get("active"):
+            st.success(
+                f"진행 중: 입찰번호 {int(ast.get('round_no', 0)):02d} | 입찰이름 {ast.get('bid_title','-')}"
+            )
+        else:
+            st.info("개시된 경매가 없습니다.")
+
+        st.divider()
+        st.markdown("### 경매 결과")
+
+        closed_docs = list(
+            db.collection("auction_rounds")
+            .where(filter=FieldFilter("status", "==", "closed"))
+            .order_by("round_no", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .stream()
+        )
+
+        if not closed_docs:
+            st.info("개시된 경매가 없습니다.")
+        else:
+            latest_round_id = closed_docs[0].id
+            rr = api_get_auction_results(latest_round_id)
+            if rr.get("ok"):
+                rd = rr.get("round", {})
+                st.caption(
+                    f"최근 마감 경매: {int(rd.get('round_no', 0)):02d}회 | 입찰이름: {rd.get('bid_title', '-') }"
+                )
+                df_rr = pd.DataFrame(rr.get("rows", []))
+                if df_rr.empty:
+                    st.info("제출된 입찰표가 없습니다.")
+                else:
+                    st.dataframe(df_rr, use_container_width=True, hide_index=True)
+
+                    out = io.BytesIO()
+                    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+                        df_rr.to_excel(writer, index=False, sheet_name="경매결과")
+                    out.seek(0)
+                    b_x, b_l = st.columns(2)
+                    with b_x:
+                        st.download_button(
+                            "엑셀저장",
+                            data=out,
+                            file_name=f"auction_result_{int(rd.get('round_no', 0)):02d}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="auction_excel_btn",
+                        )
+                    with b_l:
+                        if st.button("장부반영", use_container_width=True, key="auction_ledger_btn"):
+                            res = api_reflect_auction_ledger(ADMIN_PIN, latest_round_id)
+                            if res.get("ok"):
+                                toast("경매 관리 장부 반영 완료", icon="📒")
+                                st.rerun()
+                            else:
+                                st.error(res.get("error", "장부 반영 실패"))
+            else:
+                st.error(rr.get("error", "경매 결과 조회 실패"))
+
+        st.markdown("### 경매 관리 장부")
+        lg = api_list_auction_ledgers(limit=100)
+        df_lg = pd.DataFrame(lg.get("rows", [])) if lg.get("ok") else pd.DataFrame()
+        if df_lg.empty:
+            st.info("아직 반영된 경매 관리 장부가 없습니다.")
+        else:
+            st.dataframe(df_lg, use_container_width=True, hide_index=True)
 
     st.stop()
 
@@ -4402,7 +4775,7 @@ st.markdown(f"#### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_
 st.markdown(f"#### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
 st.markdown(f"#### 💼 직업: **{role_name}**")
 
-sub1, sub2, sub_invest, sub3 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표"])
+sub1, sub2, sub_invest, sub3, sub4 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매"])
 
 # =========================
 # 거래 탭
@@ -4586,8 +4959,50 @@ with sub3:
     render_goal_section(name, pin, balance, savings_list)
 
 # =========================
+# 경매 탭
+# =========================
+with sub4:
+    st.subheader("🏷️ 경매")
+    ast = api_get_auction_state()
+
+    if not ast.get("active"):
+        st.info("현재 진행 중인 경매가 없습니다.")
+    else:
+        round_no = int(ast.get("round_no", 0) or 0)
+        bid_title = str(ast.get("bid_title", "") or "")
+
+        st.markdown("### 입찰표")
+        st.caption(f"입찰기일: {format_kr_datetime_seconds(ast.get('opened_at'))}")
+        st.caption(f"입찰번호: {round_no:02d}")
+        st.caption(f"입찰이름: {bid_title}")
+        st.caption(f"입찰자 정보: 입찰자 {name}")
+
+        my_bid_doc = db.collection("auction_bids").document(f"{ast.get('round_id')}_{str(student_id or '')}").get()
+        if my_bid_doc.exists:
+            bd = my_bid_doc.to_dict() or {}
+            st.success(
+                f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 드림 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
+            )
+        else:
+            bid_amount = st.number_input("입찰 가격(드림)", min_value=0, step=1, key=f"user_bid_amt_{name}")
+            yes_no = st.radio("입찰표를 제출하시겠습니까?", ["아니오", "예"], horizontal=True, key=f"user_bid_yn_{name}")
+            if st.button("입찰표 제출", use_container_width=True, key=f"user_bid_submit_{name}"):
+                if yes_no != "예":
+                    st.warning("제출 전에 '예'를 선택해 주세요.")
+                else:
+                    res = api_submit_bid(name, pin, int(bid_amount or 0))
+                    if res.get("ok"):
+                        st.session_state.data.setdefault(name, {})
+                        st.session_state.data[name]["balance"] = int(res.get("balance", balance) or balance)
+                        toast("입찰표 제출 완료", icon="✅")
+                        st.rerun()
+                    else:
+                        st.error(res.get("error", "입찰표 제출 실패"))
+
+# =========================
 # 통장 내역(최신순)
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
