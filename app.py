@@ -145,6 +145,17 @@ st.markdown(
     .tpl-simple .lab { font-weight: 800; }
     .tpl-simple .meta { color:#666; font-size: 0.92rem; margin-top: 2px; }
 
+    .lottery-pick-box {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #f9fafb;
+        padding: 0.75rem;
+        text-align: center;
+        min-height: 2.6rem;
+        font-weight: 700;
+        color: #111827;
+    }
+
 /* ✅ 빠른 금액: radiogroup 라벨을 "원형 버튼"처럼 */
 .round-btns div[role="radiogroup"]{
     gap: 0.35rem !important;
@@ -1181,14 +1192,14 @@ def api_get_lottery_winners(round_id: str):
         for n in nums:
             token = f"{n:02d}"
             if n in matched:
-                token = f":red[{token}]"
+                token = f"{token}✓"
             disp.append(token)
         rows.append(
             {
                 "등수": str(x.get("rank", "") or ""),
                 "번호": int(x.get("student_no", 0) or 0),
                 "이름": str(x.get("student_name", "") or ""),
-                "복권 참여 번호": " , ".join(disp),
+                "복권 참여 번호": ", ".join(disp),
                 "당첨금": int(x.get("prize", 0) or 0),
                 "_rk": rank_key.get(str(x.get("rank", "") or ""), 9),
             }
@@ -1259,16 +1270,23 @@ def api_reflect_lottery_ledger(admin_pin: str, round_id: str):
     first_pct = int(rd.get("first_pct", 80) or 80)
     second_pct = int(rd.get("second_pct", 20) or 20)
     tax_rate = int(rd.get("tax_rate", 40) or 40)
+    has_first_winner = False
+    has_second_winner = False
     for w in winners:
         x = w.to_dict() or {}
         pz = int(x.get("prize", 0) or 0)
         prize_total += pz
-        if str(x.get("rank", "")) == "3등":
+        rank = str(x.get("rank", "") or "")
+        if rank == "3등":
             third_total += pz
+        elif rank == "1등":
+            has_first_winner = True
+        elif rank == "2등":
+            has_second_winner = True
 
     base_pool = max(0, total_amount - third_total)
-    tax_1 = int(round(base_pool * (first_pct * 0.01) * (tax_rate * 0.01)))
-    tax_2 = int(round(base_pool * (second_pct * 0.01) * (tax_rate * 0.01)))
+    tax_1 = int(round(base_pool * (first_pct * 0.01) * (tax_rate * 0.01))) if has_first_winner else 0
+    tax_2 = int(round(base_pool * (second_pct * 0.01) * (tax_rate * 0.01))) if has_second_winner else 0
     tax_total = int(tax_1 + tax_2)
     donation = int(total_amount - prize_total - tax_total)
 
@@ -4475,11 +4493,19 @@ def render_lottery_admin():
     st.subheader("🎟️ 복권")
     st.markdown("### 복권 설정 및 개시")
 
-    price = st.number_input("복권 가격 설정", min_value=2, value=20, step=1, key="lottery_price")
-    tax_rate = st.number_input("세금(%)", min_value=1, max_value=100, value=40, step=1, key="lottery_tax")
-    first_pct = st.number_input("1등 당첨 백분율(%)", min_value=0, max_value=100, value=80, step=1, key="lottery_first")
-    second_pct = st.number_input("2등 당첨 백분율(%)", min_value=0, max_value=100, value=20, step=1, key="lottery_second")
-    third_prize = st.number_input("3등 당첨금", min_value=0, value=20, step=1, key="lottery_third")
+    r1c1, r1c2, r1c3 = st.columns(3)
+    with r1c1:
+        price = st.number_input("복권 가격 설정", min_value=2, value=20, step=1, key="lottery_price")
+    with r1c2:
+        tax_rate = st.number_input("세금(%)", min_value=1, max_value=100, value=40, step=1, key="lottery_tax")
+    with r1c3:
+        third_prize = st.number_input("3등 당첨금", min_value=0, value=20, step=1, key="lottery_third")
+
+    r2c1, r2c2 = st.columns(2)
+    with r2c1:
+        first_pct = st.number_input("1등 당첨 백분율(%)", min_value=0, max_value=100, value=80, step=1, key="lottery_first")
+    with r2c2:
+        second_pct = st.number_input("2등 당첨 백분율(%)", min_value=0, max_value=100, value=20, step=1, key="lottery_second")
 
     if int(first_pct) + int(second_pct) != 100:
         st.warning("1등/2등 당첨 백분율의 합은 100이어야 합니다.")
@@ -4554,19 +4580,14 @@ def render_lottery_admin():
                 st.caption(f"회차 {int(st_info.get('round_no', 0))} | 당첨번호: {draw_caption}")
             st.dataframe(df_w, use_container_width=True, hide_index=True)
 
-            b1, b2 = st.columns(2)
-            with b1:
-                if st.button("당첨금 지급", use_container_width=True, key="lottery_pay_btn"):
-                    rp = api_pay_lottery_prizes(ADMIN_PIN, rrid)
-                    if rp.get("ok"):
-                        toast(f"당첨금 지급 완료 ({int(rp.get('count', 0))}건)", icon="💸")
-                    else:
-                        st.error(rp.get("error", "당첨금 지급 실패"))
-            with b2:
-                if st.button("장부 반영", use_container_width=True, key="lottery_ledger_btn"):
+            if st.button("당첨금 지급 및 장부 반영", use_container_width=True, key="lottery_pay_and_ledger_btn"):
+                rp = api_pay_lottery_prizes(ADMIN_PIN, rrid)
+                if not rp.get("ok"):
+                    st.error(rp.get("error", "당첨금 지급 실패"))
+                else:
                     rl = api_reflect_lottery_ledger(ADMIN_PIN, rrid)
                     if rl.get("ok"):
-                        toast("복권 관리 장부 반영 완료", icon="📒")
+                        toast(f"당첨금 지급 및 장부 반영 완료 ({int(rp.get('count', 0))}건)", icon="📒")
                         st.rerun()
                     else:
                         st.error(rl.get("error", "장부 반영 실패"))
@@ -4617,20 +4638,19 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
                     else:
                         st.warning("번호는 최대 4개까지 선택할 수 있습니다.")
                     st.session_state[sel_key] = sorted(set(cur))
-                    st.rerun()
 
     selected_nums = [int(x) for x in st.session_state.get(sel_key, [])]
     box_cols = st.columns(4)
     for idx in range(4):
         with box_cols[idx]:
             shown = f"{selected_nums[idx]:02d}" if idx < len(selected_nums) else ""
-            st.text_input(f"선택번호 {idx+1}", value=shown, disabled=True, key=f"lottery_pick_view_{student_id}_{idx}")
+            st.caption(f"선택번호 {idx+1}")
+            st.markdown(f"<div class='lottery-pick-box'>{shown or '&nbsp;'}</div>", unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
         if st.button("숫자 초기화", use_container_width=True, key=f"lottery_reset_{student_id}"):
             st.session_state[sel_key] = []
-            st.rerun()
     with c2:
         if st.button("복권 구매", use_container_width=True, key=f"lottery_buy_{student_id}"):
             if len(selected_nums) != 4:
@@ -5708,5 +5728,4 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
-
 
