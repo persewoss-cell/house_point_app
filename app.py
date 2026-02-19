@@ -4621,7 +4621,6 @@ def render_lottery_admin():
     else:
         st.info("개시된 복권이 없습니다.")
 
-    st.divider()
     st.markdown("### 🎰 복권 추첨하기")
     d1, d2, d3, d4 = st.columns(4)
     with d1:
@@ -4698,7 +4697,6 @@ def render_lottery_admin():
     else:
         st.info("회차 정보가 없습니다.")
 
-    st.divider()
     st.markdown("### 복권 관리 장부")
     lg = api_list_lottery_ledgers(limit=100)
     df_lg = pd.DataFrame(lg.get("rows", [])) if lg.get("ok") else pd.DataFrame()
@@ -4779,7 +4777,6 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
                     else:
                         st.error(res.get("error", "복권 구매 실패"))
 
-    st.divider()
     st.markdown("### 📜 복권 구매 내역")
     rid = str(st_info.get("round_id", "") or "")
     if rid:
@@ -4876,7 +4873,6 @@ if st.session_state.admin_ok:
         # ✅ 설정탭 되돌리기(관리자)
         # -------------------------
         if st.session_state.get("bulk_undo_mode", False):
-            st.divider()
             st.subheader("↩️ 선택 되돌리기(관리자)")
 
             admin_pin_rb = st.text_input(
@@ -5821,6 +5817,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
