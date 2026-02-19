@@ -1328,16 +1328,27 @@ def api_reflect_lottery_ledger(admin_pin: str, round_id: str):
 
     prize_total = 0
     tax_rate = int(rd.get("tax_rate", 40) or 40)
-    taxable_prize_total = 0
+    first_pct = int(rd.get("first_pct", 80) or 80)
+    second_pct = int(rd.get("second_pct", 20) or 20)
+    third_total = 0
+    first_winner_count = 0
+    second_winner_count = 0
     for w in winners:
         x = w.to_dict() or {}
         pz = int(x.get("prize", 0) or 0)
         prize_total += pz
         rank = str(x.get("rank", "") or "")
-        if rank in ("1등", "2등"):
-            taxable_prize_total += pz
+        if rank == "1등":
+            first_winner_count += 1
+        elif rank == "2등":
+            second_winner_count += 1
+        elif rank == "3등":
+            third_total += pz
 
-    tax_total = round_half_up(taxable_prize_total * (tax_rate * 0.01)) if taxable_prize_total > 0 else 0
+    base_pool = max(0, int(total_amount - third_total))
+    first_tax_total = round_half_up(base_pool * (first_pct * 0.01) * (tax_rate * 0.01)) if first_winner_count > 0 else 0
+    second_tax_total = round_half_up(base_pool * (second_pct * 0.01) * (tax_rate * 0.01)) if second_winner_count > 0 else 0
+    tax_total = int(first_tax_total + second_tax_total)
     donation = int(total_amount - prize_total - tax_total)
 
     db.collection("lottery_ledgers").add(
@@ -5824,6 +5835,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
