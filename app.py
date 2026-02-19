@@ -5506,8 +5506,6 @@ if st.session_state.admin_ok:
     with tabs[5]:
         render_lottery_admin()
 
-    st.stop()
-
     # -------------------------
     # 📒 전체통장(사람별 통장 내역)
     # -------------------------␊
@@ -5843,6 +5841,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
