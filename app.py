@@ -4795,7 +4795,6 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
 # 관리자 화면
 # =========================
 if st.session_state.admin_ok:
-    st.markdown("## 🛡️ 관리자")
 
     accounts_res = api_list_accounts_cached()
     accounts = accounts_res.get("accounts", []) if accounts_res.get("ok") else []
@@ -5822,4 +5821,5 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
