@@ -5574,7 +5574,7 @@ st.markdown("""
 <style>
 .asset-line {
     margin: 2px 0;
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 600;
 }
 </style>
@@ -5822,6 +5822,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
