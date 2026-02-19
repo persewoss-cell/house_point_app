@@ -2138,7 +2138,7 @@ def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
         shown = []
         for pid, v in items[:3]:
             pname = prod_map.get(pid, (pid, 0.0))[0]
-            shown.append(f"{pname} {int(round(v))포인트")
+            shown.append(f"{pname} {int(round(v))드림")
         text = ", ".join(shown)
         if len(items) > 3:
             text += f" 외 {len(items)-3}개"
@@ -5835,6 +5835,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
