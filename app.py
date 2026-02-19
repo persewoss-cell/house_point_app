@@ -4708,16 +4708,29 @@ if st.session_state.admin_ok:
                     st.dataframe(df_rr, use_container_width=True, hide_index=True)
 
                     out = io.BytesIO()
-                    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-                        df_rr.to_excel(writer, index=False, sheet_name="경매결과")
+                    excel_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.xlsx"
+                    for engine_name in ("xlsxwriter", "openpyxl"):
+                        try:
+                            with pd.ExcelWriter(out, engine=engine_name) as writer:
+                                df_rr.to_excel(writer, index=False, sheet_name="경매결과")
+                            break
+                        except ModuleNotFoundError:
+                            out = io.BytesIO()
+                    else:
+                        out = io.BytesIO(df_rr.to_csv(index=False).encode("utf-8-sig"))
+                        excel_mime = "text/csv"
+                        excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.csv"
+                        st.warning("엑셀 저장 엔진을 찾지 못해 CSV 파일로 저장합니다.")
+
                     out.seek(0)
                     b_x, b_l = st.columns(2)
                     with b_x:
                         st.download_button(
                             "엑셀저장",
                             data=out,
-                            file_name=f"auction_result_{int(rd.get('round_no', 0)):02d}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            file_name=excel_filename,
+                            mime=excel_mime,
                             use_container_width=True,
                             key="auction_excel_btn",
                         )
@@ -5016,6 +5029,7 @@ with sub4:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
