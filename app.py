@@ -5570,14 +5570,25 @@ inv_pr_text_pt = str(inv_pr_text or "").replace("드림", "포인트")
 asset_total = balance + sv_total + int(inv_total)
 
 st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
+st.markdown("""
+<style>
+.asset-line {
+    margin: 2px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown(
     f"""
-##### 💰 통장 잔액: **{balance} 포인트**
-##### 🏦 적금 금액: **{sv_total} 포인트**
-##### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**
-##### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**
-##### 💼 직업: **{role_name}**
-"""
+    <div class="asset-line">💰 통장 잔액: <b>{balance} 포인트</b></div>
+    <div class="asset-line">🏦 적금 금액: <b>{sv_total} 포인트</b></div>
+    <div class="asset-line">🪙 투자 원금: <b>총 {int(inv_pr_total)} 포인트 ({inv_pr_text_pt if inv_pr_text_pt else '없음'})</b></div>
+    <div class="asset-line">📈 현재 평가: <b>총 {int(inv_total)} 포인트 ({inv_text_pt if inv_text_pt else '없음'})</b></div>
+    <div class="asset-line">💼 직업: <b>{role_name}</b></div>
+    """,
+    unsafe_allow_html=True
 )
 
 sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
@@ -5811,6 +5822,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
