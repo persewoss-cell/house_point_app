@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta, date
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 # =========================
@@ -4671,13 +4672,24 @@ if st.session_state.admin_ok:
         st.divider()
         st.markdown("### 경매 결과")
 
-        closed_docs = list(
-            db.collection("auction_rounds")
-            .where(filter=FieldFilter("status", "==", "closed"))
-            .order_by("round_no", direction=firestore.Query.DESCENDING)
-            .limit(1)
-            .stream()
-        )
+        try:
+            closed_docs = list(
+                db.collection("auction_rounds")
+                .where(filter=FieldFilter("status", "==", "closed"))
+                .order_by("round_no", direction=firestore.Query.DESCENDING)
+                .limit(1)
+                .stream()
+            )
+        except FailedPrecondition:
+            # 복합 인덱스가 아직 준비되지 않은 환경(Streamlit Cloud 등)용 폴백.
+            # round_no 최신순으로 일부 문서를 가져와서 status=closed를 앱에서 필터링한다.
+            recent_rounds = list(
+                db.collection("auction_rounds")
+                .order_by("round_no", direction=firestore.Query.DESCENDING)
+                .limit(30)
+                .stream()
+            )
+            closed_docs = [doc for doc in recent_rounds if (doc.to_dict() or {}).get("status") == "closed"][:1]
 
         if not closed_docs:
             st.info("개시된 경매가 없습니다.")
@@ -5004,5 +5016,6 @@ with sub4:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
