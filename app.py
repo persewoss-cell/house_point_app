@@ -4626,9 +4626,9 @@ def render_lottery_admin():
         if not df_ent.empty:
             st.dataframe(df_ent[["참여 일시", "이름", "복권 참여 번호"]], use_container_width=True, hide_index=True)
         else:
-            st.info("(평상시) 개시된 복권이 없습니다.")
+            st.info("개시된 복권이 없습니다.")
     else:
-        st.info("(평상시) 개시된 복권이 없습니다.")
+        st.info("개시된 복권이 없습니다.")
 
     st.divider()
     st.markdown("### 🎰 복권 추첨하기")
@@ -4731,7 +4731,7 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
 
     st.markdown("### 🎟️ 복권 구매하기")
     if not open_round:
-        st.info("(평상시) 개시된 복권이 없습니다.")
+        st.info("개시된 복권이 없습니다.")
     else:
         st.caption(
             f"{int(open_round.get('round_no', 0) or 0)}회차 | 복권 가격 {int(open_round.get('ticket_price', 0) or 0)}"
@@ -5432,7 +5432,7 @@ if st.session_state.admin_ok:
     with tabs[-2]:
         st.subheader("🏷️ 경매")
 
-        st.markdown("### 경매 개시")
+        st.markdown("### 📢 경매 개시")
         bid_title_admin = st.text_input("입찰 내역", key="auction_admin_bid_title").strip()
         c_a1, c_a2 = st.columns(2)
         with c_a1:
@@ -5461,7 +5461,7 @@ if st.session_state.admin_ok:
             st.info("개시된 경매가 없습니다.")
 
         st.divider()
-        st.markdown("### 경매 결과")
+        st.markdown("### 📊 경매 결과")
 
         try:
             closed_docs = list(
@@ -5538,7 +5538,7 @@ if st.session_state.admin_ok:
             else:
                 st.error(rr.get("error", "경매 결과 조회 실패"))
 
-        st.markdown("### 경매 관리 장부")
+        st.markdown("### 📚 경매 관리 장부")
         lg = api_list_auction_ledgers(limit=100)
         df_lg = pd.DataFrame(lg.get("rows", [])) if lg.get("ok") else pd.DataFrame()
         if df_lg.empty:
@@ -5796,7 +5796,7 @@ with sub4:
         round_no = int(ast.get("round_no", 0) or 0)
         bid_title = str(ast.get("bid_title", "") or "")
 
-        st.markdown("### 입찰표")
+        st.markdown("### 📝 입찰표")
         st.caption(f"입찰기일: {format_kr_datetime_seconds(ast.get('opened_at'))}")
         st.caption(f"입찰번호: {round_no:02d}")
         st.caption(f"입찰이름: {bid_title}")
@@ -5835,6 +5835,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
