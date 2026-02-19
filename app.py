@@ -3003,7 +3003,6 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                         else:
                             st.error(res.get("error", "지급 실패"))
     
-    st.divider()
     
     # -------------------------------------------------
     # 3) (사용자) 투자 실행
@@ -5829,6 +5828,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
