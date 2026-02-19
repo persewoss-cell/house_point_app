@@ -3083,7 +3083,6 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     # 4) (관리자) 투자 종목 추가/수정/삭제
     # -------------------------------------------------
     if inv_admin_ok:
-        st.divider()
         st.markdown("### 🧰 투자 종목 추가/수정/삭제")
     
         prod_all = _get_products(active_only=False)
@@ -5828,6 +5827,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
