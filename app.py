@@ -4802,12 +4802,7 @@ if st.session_state.admin_ok:
         st.info("활성 계정이 없습니다.")
         st.stop()
 
-    name_search = st.text_input("🔎 계정검색(이름 일부)", key="admin_search").strip()
-    filtered = [a for a in accounts if (name_search in a["name"])] if name_search else accounts
-
-    if not filtered:
-        st.warning("검색 결과가 없어요.")
-        st.stop()
+    filtered = accounts
 
     tab_labels = ["⚙️ 설정", "📒 전체통장", "💼 직업/월급", "📈 투자"] + [f"👤 {a['name']}" for a in filtered] + ["🏷️ 경매", "🍀 복권"]
     tabs = st.tabs(tab_labels)
@@ -5821,6 +5816,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
