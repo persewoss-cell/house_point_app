@@ -5570,11 +5570,15 @@ inv_pr_text_pt = str(inv_pr_text or "").replace("드림", "포인트")
 asset_total = balance + sv_total + int(inv_total)
 
 st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
-st.markdown(f"##### 💰 통장 잔액: **{balance} 포인트**")
-st.markdown(f"##### 🏦 적금 금액: **{sv_total} 포인트**")
-st.markdown(f"##### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
-st.markdown(f"##### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
-st.markdown(f"##### 💼 직업: **{role_name}**")
+st.markdown(
+    f"""
+#### 💰 통장 잔액: **{balance} 포인트**")
+#### 🏦 적금 금액: **{sv_total} 포인트**")
+#### 🪙 투자 원금: **총 {int(inv_pr_total)} 포인트({inv_pr_text_pt if inv_pr_text_pt else '없음'})**")
+#### 📈 현재 평가: **총 {int(inv_total)} 포인트({inv_text_pt if inv_text_pt else '없음'})**")
+#### 💼 직업: **{role_name}**")
+"""
+)
 
 sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
 
@@ -5807,6 +5811,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
