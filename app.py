@@ -3731,7 +3731,6 @@ def _render_jobs_admin_like():
             except Exception as e:
                 st.error(f"전체 직업 해제 실패: {e}")
 
-    st.divider()
     # -------------------------------------------------
     # ✅ 직업 현황(학생 기준 표) — 배정된 학생만 표시
     # -------------------------------------------------
@@ -5827,6 +5826,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
