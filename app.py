@@ -5573,6 +5573,22 @@ st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
 st.markdown("""
 <style>
 .asset-line {
+    margin: 6px 0;
+    font-size: 23px;
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(
+    f"""
+    <div class="asset-title">🧮 총 자산: <b>{asset_total} 포인트</b></div>
+    """,
+    unsafe_allow_html=True
+)
+st.markdown("""
+<style>
+.asset-line {
     margin: 2px 0;
     font-size: 21px;
     font-weight: 600;
@@ -5822,6 +5838,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
