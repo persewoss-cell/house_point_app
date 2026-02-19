@@ -5738,7 +5738,6 @@ with sub2:
         else:
             st.error(res.get("error", "적금 가입 실패"))
 
-    st.divider()
     savings = st.session_state.data.get(name, {}).get("savings", [])
     render_active_savings_list(savings, name, pin, balance)
 
@@ -5808,6 +5807,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
