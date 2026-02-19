@@ -4940,8 +4940,6 @@ if st.session_state.admin_ok:
                             else:
                                 st.error(res2.get("error", "되돌리기 실패"))
 
-        st.divider()
-
         # -------------------------------------------------
         # 2) ✅ (1번) 템플릿 정렬/관리 = "접기/펼치기" (기본 접힘)
         # -------------------------------------------------
@@ -5161,7 +5159,6 @@ if st.session_state.admin_ok:
                                 toast("변경 취소(원복)!", icon="↩️")
                                 st.rerun()
 
-        st.divider()
 
         # -------------------------------------------------
         # 3) 템플릿 추가/수정/삭제
@@ -5263,7 +5260,6 @@ if st.session_state.admin_ok:
                         st.session_state["tpl_del_confirm_setting2"] = False
                         st.rerun()
 
-        st.divider()
 
         # -------------------------------------------------
         # 4) PIN 재설정 (맨 아래)
@@ -5378,7 +5374,6 @@ if st.session_state.admin_ok:
                 render_tx_table(df_tx)
 
             # ✅ 개별 관리자 입금/출금 (캡쳐와 동일 형식으로 통일)
-            st.divider()
             st.markdown("### 🧾 개별 관리자 입금/출금")
 
             memo_ind, dep_ind, wd_ind = render_admin_trade_ui(
@@ -5404,11 +5399,9 @@ if st.session_state.admin_ok:
                         st.error(res.get("error", "저장 실패"))
 
             # 적금 목록(조회)
-            st.divider()
             render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=bal_now)
 
             # 목표저금 조회
-            st.divider()
             render_goal_readonly_admin(student_id=sid, balance_now=bal_now, savings=savings)
             
     # -------------------------
@@ -5444,7 +5437,6 @@ if st.session_state.admin_ok:
         else:
             st.info("개시된 경매가 없습니다.")
 
-        st.divider()
         st.markdown("### 📊 경매 결과")
 
         try:
@@ -5647,7 +5639,6 @@ with sub1:
     # 되돌리기(관리자 전용) - 기존 로직 유지
     # -------------------------
     if st.session_state.undo_mode:
-        st.divider()
         st.subheader("↩️ 선택 되돌리기(관리자 전용)")
 
         admin_pin2 = st.text_input("관리자 PIN 입력", type="password", key=f"undo_admin_pin_{name}").strip()
@@ -5817,6 +5808,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
