@@ -4702,6 +4702,8 @@ if st.session_state.admin_ok:
                     f"최근 마감 경매: {int(rd.get('round_no', 0)):02d}회 | 입찰이름: {rd.get('bid_title', '-') }"
                 )
                 df_rr = pd.DataFrame(rr.get("rows", []))
+                if "번호" in df_rr.columns:
+                    df_rr = df_rr.drop(columns=["번호"])
                 if df_rr.empty:
                     st.info("제출된 입찰표가 없습니다.")
                 else:
@@ -5029,6 +5031,7 @@ with sub4:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
