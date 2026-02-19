@@ -67,7 +67,7 @@ st.markdown(
     /* radio → 버튼처럼 */
     div[role="radiogroup"] > label {
         background: #f3f4f6;
-        padding: 3px 10px;
+        padding: 1px 10px;
         border-radius: 12px;
         margin-right: 6px;
         margin-bottom: 6px;
@@ -5821,6 +5821,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
