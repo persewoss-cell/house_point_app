@@ -5787,7 +5787,7 @@ with sub3:
 # 경매 탭
 # =========================
 with sub4:
-    st.subheader("🏷️ 경매 참하기")
+    st.subheader("🏷️ 경매 참여하기")
     ast = api_get_auction_state()
 
     if not ast.get("active"):
@@ -5829,5 +5829,6 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
