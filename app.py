@@ -5730,6 +5730,10 @@ with sub1:
             with cY:
                 st.caption("※ ‘적금 가입/해지/만기’는 되돌리기에서 제외됩니다.")
 
+    # 거래 탭에서만 통장 내역(최신순) 노출
+    st.subheader("📒 통장 내역 (최신순)")
+    render_tx_table(df_tx)
+
 # =========================
 # 적금 탭
 # =========================
@@ -5829,22 +5833,4 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
-
-# =========================
-# 통장 내역(최신순)
-# =========================
-st.subheader("📒 통장 내역 (최신순)")
-render_tx_table(df_tx)
-
-
-
-
-
-
-
-
-
-
-
-
 
