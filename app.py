@@ -3763,9 +3763,6 @@ def _render_jobs_admin_like():
     else:
         st.info("아직 직업이 배정된 학생이 없습니다.")
 
-
-    st.divider()
-
     # -------------------------------------------------
     # ✅ 직업 추가 / 수정 / 삭제 / 순서 이동 (정원 제한 없음)
     # -------------------------------------------------
@@ -3869,7 +3866,6 @@ def _render_jobs_admin_like():
                     toast("이동 완료!", icon="✅")
                     st.rerun()
 
-    st.divider()
 
     # -------------------------------------------------
     # ✅ 직업 CSV 일괄 업로드 (정원 컬럼 없음)
@@ -5826,6 +5822,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
