@@ -5569,22 +5569,7 @@ inv_pr_text_pt = str(inv_pr_text or "").replace("드림", "포인트")
 
 asset_total = balance + sv_total + int(inv_total)
 
-st.markdown("""
-<style>
-.asset-line {
-    margin: 1px 0;
-    font-size: 23px;
-    font-weight: 600;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown(
-    f"""
-    <div class="asset-title">🧮 총 자산: <b>{asset_total} 포인트</b></div>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown(f"### 🧮 총 자산: **{asset_total} 포인트**")
 st.markdown("""
 <style>
 .asset-line {
@@ -5837,24 +5822,4 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
