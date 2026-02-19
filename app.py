@@ -2078,7 +2078,7 @@ def _get_role_name_by_student_id(student_id: str) -> str:
 def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
     """
     ✅ return (표시문구, 투자총액_현재가치추정)
-    - 표시문구 예: "국어 100드림" / 여러개면 "국어 100드림, 수학 50드림"
+    - 표시문구 예: "국어 100포인트" / 여러개면 "국어 100포인트, 수학 50포인트림"
     - invest_ledger: redeemed=False 항목을 보유로 간주
     - invest_products: current_price 사용 + 종목명(name/label/title/subject) 대응
     """
@@ -2138,7 +2138,7 @@ def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
         shown = []
         for pid, v in items[:3]:
             pname = prod_map.get(pid, (pid, 0.0))[0]
-            shown.append(f"{pname} {int(round(v))}드림")
+            shown.append(f"{pname} {int(round(v))포인트")
         text = ", ".join(shown)
         if len(items) > 3:
             text += f" 외 {len(items)-3}개"
@@ -2152,7 +2152,7 @@ def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
 def _get_invest_principal_by_student_id(student_id: str) -> tuple[str, int]:
     """
     ✅ return (표시문구, 투자원금합계)
-    - 표시문구 예: "국어 100드림, 수학 50드림"
+    - 표시문구 예: "국어 100포인트, 수학 50포인트"
     - invest_ledger: redeemed=False 항목의 invest_amount를 '원금'으로 간주해 종목별 합산
     """
     try:
@@ -2202,10 +2202,10 @@ def _get_invest_principal_by_student_id(student_id: str) -> tuple[str, int]:
         shown = []
         if len(items) <= 6:
             for pid, v in items:
-                shown.append(f"{prod_name.get(pid, pid)} {int(v)}드림")
+                shown.append(f"{prod_name.get(pid, pid)} {int(v)}포인트")
         else:
             for pid, v in items[:3]:
-                shown.append(f"{prod_name.get(pid, pid)} {int(v)}드림")
+                shown.append(f"{prod_name.get(pid, pid)} {int(v)}포인트")
             shown.append(f"외 {len(items)-3}개")
 
         return (", ".join(shown), total_principal)
@@ -2477,7 +2477,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
             for k in sorted(d.keys()):
                 v = int(d.get(k, 0) or 0)
                 if v > 0:
-                    items.append(f"{k} {v}드림")
+                    items.append(f"{k} {v}포인트")
             return ", ".join(items) if items else "없음"
 
         try:
@@ -5797,19 +5797,19 @@ with sub4:
         bid_title = str(ast.get("bid_title", "") or "")
 
         st.markdown("### 📝 입찰표")
-        st.caption(f"입찰기일: {format_kr_datetime_seconds(ast.get('opened_at'))}")
-        st.caption(f"입찰번호: {round_no:02d}")
-        st.caption(f"입찰이름: {bid_title}")
-        st.caption(f"입찰자 정보: 입찰자 {name}")
+        st.caption(f"- 입찰기일: {format_kr_datetime_seconds(ast.get('opened_at'))}")
+        st.caption(f"- 입찰번호: {round_no:02d}")
+        st.caption(f"- 입찰이름: {bid_title}")
+        st.caption(f"- 입찰자 정보: 입찰자 {name}")
 
         my_bid_doc = db.collection("auction_bids").document(f"{ast.get('round_id')}_{str(student_id or '')}").get()
         if my_bid_doc.exists:
             bd = my_bid_doc.to_dict() or {}
             st.success(
-                f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 드림 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
+                f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
             )
         else:
-            bid_amount = st.number_input("입찰 가격(드림)", min_value=0, step=1, key=f"user_bid_amt_{name}")
+            bid_amount = st.number_input("입찰 가격(포인트)", min_value=0, step=1, key=f"user_bid_amt_{name}")
             yes_no = st.radio("입찰표를 제출하시겠습니까?", ["아니오", "예"], horizontal=True, key=f"user_bid_yn_{name}")
             if st.button("입찰표 제출", use_container_width=True, key=f"user_bid_submit_{name}"):
                 if yes_no != "예":
@@ -5835,6 +5835,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
