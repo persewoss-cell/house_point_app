@@ -4708,79 +4708,75 @@ def render_lottery_admin():
 
 def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
     st.subheader("🎟️ 복권")
-    st.markdown("### 복권 구매하기")
     st_info = api_get_lottery_state()
+    login_name = name
+    login_pin = pin
+    open_round = None
+    if st_info.get("active"):
+        open_round = {
+            "round_no": int(st_info.get("round_no", 0) or 0),
+            "ticket_price": int(st_info.get("price", 20) or 20),
+        }
 
-    if not st_info.get("active"):
-        st.info("현재 진행 중인 복권이 없습니다.")
-        return
+    st.markdown("### 복권 구매하기")
+    if not open_round:
+        st.info("(평상시) 개시된 복권이 없습니다.")
+    else:
+        st.caption(
+            f"{int(open_round.get('round_no', 0) or 0)}회차 | 복권 가격 {int(open_round.get('ticket_price', 0) or 0)}"
+        )
 
-    round_no = int(st_info.get("round_no", 0) or 0)
-    price = int(st_info.get("price", 20) or 20)
-    st.caption(f"{round_no}회차 | 복권 가격 {price}")
+        key_pick = "lot_user_picks"
+        if key_pick not in st.session_state:
+            st.session_state[key_pick] = []
 
-    sel_key = f"lottery_sel_{student_id}"
-    buf_key = f"lottery_sel_buf_{student_id}"
-    st.session_state.setdefault(sel_key, [])
-    st.session_state.setdefault(buf_key, [])
-
-    for row in range(2):
-        cols = st.columns(10)
-        for i in range(10):
-            n = row * 10 + i + 1
-            with cols[i]:
-                selected = int(n) in set(st.session_state.get(sel_key, []))
-                pending = int(n) in set(st.session_state.get(buf_key, []))
-                label = f"[{n:02d}]" + ("✅" if selected else ("⏳" if pending else ""))
-                if st.button(label, key=f"lottery_btn_{student_id}_{n}", use_container_width=True):
-                    cur = [int(x) for x in st.session_state.get(buf_key, [])]
-                    if n in cur:
-                        cur = [x for x in cur if x != n]
-                    elif len(cur) < 4:
-                        cur.append(n)
-                    else:
-                        st.warning("번호는 최대 4개까지 선택할 수 있습니다.")
-                    cur = sorted(set(cur))
-                    if len(cur) == 4:
-                        st.session_state[sel_key] = cur
-                        st.session_state[buf_key] = []
-                    else:
-                        st.session_state[buf_key] = cur
-                        
-    selected_nums = [int(x) for x in st.session_state.get(sel_key, [])]
-    pending_nums = [int(x) for x in st.session_state.get(buf_key, [])]
-    if pending_nums:
-        st.caption(f"선택 중: {len(pending_nums)}/4 (4개를 고르면 한 번에 입력됩니다)")
-    box_cols = st.columns(4)
-    for idx in range(4):
-        with box_cols[idx]:
-            shown = f"{selected_nums[idx]:02d}" if idx < len(selected_nums) else ""
-            st.caption(f"선택번호 {idx+1}")
-            st.markdown(f"<div class='lottery-pick-box'>{shown or '&nbsp;'}</div>", unsafe_allow_html=True)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("숫자 초기화", use_container_width=True, key=f"lottery_reset_{student_id}"):
-            st.session_state[sel_key] = []
-            st.session_state[buf_key] = []
-    with c2:
-        if st.button("복권 구매", use_container_width=True, key=f"lottery_buy_{student_id}"):
-            if len(selected_nums) != 4:
-                st.error("1~20에서 중복 없이 4개 번호를 선택해 주세요.")
-            elif int(balance) < int(price):
-                st.error("통장 잔액이 부족합니다.")
+        def _toggle_pick(n: int):
+            cur = list(st.session_state.get(key_pick, []))
+            if n in cur:
+                cur = [x for x in cur if x != n]
             else:
-                res = api_buy_lottery(name, pin, selected_nums)
-                if res.get("ok"):
-                    st.session_state[sel_key] = []
-                    st.session_state[buf_key] = []
-                    get_my_lottery_entries_cached.clear()
-                    st.session_state.data.setdefault(name, {})
-                    st.session_state.data[name]["balance"] = int(res.get("balance", balance) or balance)
-                    toast("복권 구매 완료", icon="🎟️")
-                    st.rerun()
+                if len(cur) >= 4:
+                    st.warning("숫자는 최대 4개까지 선택할 수 있습니다.")
+                    return
+                cur.append(n)
+            st.session_state[key_pick] = sorted(cur)
+
+        grid_nums = list(range(1, 21))
+        for row in range(2):
+            cols = st.columns(10)
+            for i, c in enumerate(cols):
+                n = grid_nums[row * 10 + i]
+                selected = n in st.session_state.get(key_pick, [])
+                label = f"[{n:02d}]✅" if selected else f"[{n:02d}]"
+                c.button(label, key=f"lot_pick_{n}", on_click=_toggle_pick, args=(n,), use_container_width=True)
+
+        picks = sorted(list(st.session_state.get(key_pick, [])))
+        ph_cols = st.columns(4)
+        for i in range(4):
+            with ph_cols[i]:
+                txt = f"{picks[i]:02d}" if i < len(picks) else ""
+                st.markdown(
+                    f"<div style='height:60px;border:2px solid #888;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700'>{txt}</div>",
+                    unsafe_allow_html=True,
+                )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("숫자 초기화", key="lot_clear_btn", use_container_width=True):
+                st.session_state[key_pick] = []
+                st.rerun()
+        with c2:
+            if st.button("복권 구매", key="lot_buy_btn", use_container_width=True):
+                if len(picks) != 4:
+                    st.error("숫자 4개를 선택해 주세요.")
                 else:
-                    st.error(res.get("error", "복권 구매 실패"))
+                    res = api_buy_lottery(login_name, login_pin, picks)
+                    if res.get("ok"):
+                        toast("복권 구매 완료! 통장에서 금액이 차감되었습니다.", icon="✅")
+                        st.session_state[key_pick] = []
+                        st.rerun()
+                    else:
+                        st.error(res.get("error", "복권 구매 실패"))
 
     st.divider()
     st.markdown("### 복권 구매 내역")
@@ -5828,6 +5824,7 @@ with sub5:
 # =========================
 st.subheader("📒 통장 내역 (최신순)")
 render_tx_table(df_tx)
+
 
 
 
