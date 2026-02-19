@@ -4609,7 +4609,6 @@ def render_lottery_admin():
     else:
         st.info("개시된 복권이 없습니다.")
 
-    st.divider()
     st.markdown("### 📝 복권 참여 결과")
     rrid = str(st_info.get("round_id", "") or "")
     if rrid:
@@ -5822,6 +5821,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
