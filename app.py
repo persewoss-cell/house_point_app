@@ -4986,7 +4986,11 @@ def render_lottery_admin():
 
     st.markdown("### 🎉 당첨자 확인")
     if rrid:
+        has_draw_numbers = len(st_info.get("draw_numbers") or []) == 4
+
         def render_lottery_pay_and_ledger_button():
+            if not has_draw_numbers:
+                return
             if st.button("당첨금 지급 및 장부 반영", use_container_width=True, key="lottery_pay_and_ledger_btn"):
                 rp = api_pay_lottery_prizes(ADMIN_PIN, rrid)
                 if not rp.get("ok"):
@@ -4999,11 +5003,11 @@ def render_lottery_admin():
                     else:
                         st.error(rl.get("error", "장부 반영 실패"))
 
-        ws = api_get_lottery_winners(rrid)
-        df_w = pd.DataFrame(ws.get("rows", [])) if ws.get("ok") else pd.DataFrame()
-        if not df_w.empty:
-            draw_caption = ", ".join(f"{int(n):02d}" for n in (st_info.get("draw_numbers") or []))
-            if draw_caption:
+        ws = api_get_lottery_winners(rrid)␊
+        df_w = pd.DataFrame(ws.get("rows", [])) if ws.get("ok") else pd.DataFrame()␊
+        if not df_w.empty:␊
+            draw_caption = ", ".join(f"{int(n):02d}" for n in (st_info.get("draw_numbers") or []))␊
+            if draw_caption:␊
                 st.caption(f"회차 {int(st_info.get('round_no', 0))} | 당첨번호: {draw_caption}")
             table_rows = []
             for _, row in df_w.iterrows():
@@ -5036,7 +5040,10 @@ def render_lottery_admin():
             st.markdown(winners_html, unsafe_allow_html=True)
             render_lottery_pay_and_ledger_button()
         else:
-            st.info("당첨자가 없습니다.")
+            if has_draw_numbers:
+                st.info("당첨자가 없습니다.")
+            else:
+                st.info("당첨번호 제출 후 당첨자를 확인할 수 있습니다.")
             render_lottery_pay_and_ledger_button()
     else:
         st.info("회차 정보가 없습니다.")
@@ -6185,5 +6192,6 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
