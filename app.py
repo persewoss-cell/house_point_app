@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import random
 from decimal import Decimal, ROUND_HALF_UP
 
 # ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
@@ -47,6 +48,7 @@ st.session_state.setdefault("tpl_sort_panel_open", False)
 st.session_state.setdefault("tpl_sort_mode", "기본")
 st.session_state.setdefault("tpl_mobile_sort_ui", False)
 st.session_state.setdefault("tpl_work_ids", [])
+st.session_state.setdefault("auction_refund_non_winner", True)
 
 
 # =========================
@@ -59,9 +61,9 @@ st.markdown(
     @media (max-width: 768px) {
         section.main > div:first-child { padding-top: 3.2rem; }
     }
-    .block-container { padding-bottom: 2.0rem; }
+    .block-container { padding-bottom: 7.0rem; }
     @media (max-width: 768px) {
-        .block-container { padding-bottom: 6.0rem; }
+        .block-container { padding-bottom: 9.0rem; }
     }
 
     /* radio → 버튼처럼 */
@@ -234,6 +236,7 @@ def api_add_treasury_tx(admin_pin: str, memo: str, income: int = 0, expense: int
                 "created_at": datetime.now(KST).isoformat(),
             }
         )
+        clear_student_read_cache()
         return {"ok": True}
     except Exception as e:
         # 국고 컬렉션이 아직 없어도 앱이 죽지 않게
@@ -439,6 +442,76 @@ def api_list_templates_cached():
     return {"ok": True, "templates": templates}
 
 
+@st.cache_data(ttl=20, show_spinner=False)
+def _api_get_txs_by_student_id_cached(student_id: str, limit: int):
+    q = (
+        db.collection("transactions")
+        .where(filter=FieldFilter("student_id", "==", student_id))
+        .order_by("created_at", direction=firestore.Query.DESCENDING)
+        .limit(int(limit))
+        .stream()
+    )
+    rows = []
+    for d in q:
+        tx = d.to_dict() or {}
+        created_dt_utc = _to_utc_datetime(tx.get("created_at"))
+        amt = int(tx.get("amount", 0) or 0)
+        rows.append(
+            {
+                "tx_id": d.id,
+                "created_at_utc": created_dt_utc,
+                "created_at_kr": format_kr_datetime(created_dt_utc.astimezone(KST)) if created_dt_utc else "",
+                "memo": tx.get("memo", ""),
+                "type": tx.get("type", ""),
+                "amount": amt,
+                "deposit": amt if amt > 0 else 0,
+                "withdraw": -amt if amt < 0 else 0,
+                "balance_after": int(tx.get("balance_after", 0) or 0),
+            }
+        )
+    return rows
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _api_get_balance_cached(name: str, pin: str):
+    student_doc = fs_auth_student(name, pin)
+    if not student_doc:
+        return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
+    data = student_doc.to_dict() or {}
+    return {"ok": True, "balance": int(data.get("balance", 0) or 0), "student_id": student_doc.id}
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _api_savings_list_by_student_id_cached(student_id: str):
+    docs = (
+        db.collection("savings")
+        .where(filter=FieldFilter("student_id", "==", student_id))
+        .order_by("start_date", direction=firestore.Query.DESCENDING)
+        .limit(50)
+        .stream()
+    )
+    out = []
+    for d in docs:
+        s = d.to_dict() or {}
+        out.append(
+            {
+                "savings_id": d.id,
+                "principal": int(s.get("principal", 0) or 0),
+                "weeks": int(s.get("weeks", 0) or 0),
+                "interest": int(s.get("interest", 0) or 0),
+                "maturity_date": _to_utc_datetime(s.get("maturity_date")),
+                "status": s.get("status", "active"),
+            }
+        )
+    return out
+
+
+def clear_student_read_cache():
+    _api_get_txs_by_student_id_cached.clear()
+    _api_get_balance_cached.clear()
+    _api_savings_list_by_student_id_cached.clear()
+
+
 # =========================
 # Account CRUD
 # =========================
@@ -515,6 +588,7 @@ def api_add_tx(name, pin, memo, deposit, withdraw):
 
     try:
         new_bal = _do(db.transaction())
+        clear_student_read_cache()
         return {"ok": True, "balance": new_bal}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -571,6 +645,7 @@ def api_admin_add_tx_by_student_id(admin_pin: str, student_id: str, memo: str, d
 
     try:
         new_bal = _do(db.transaction())
+        clear_student_read_cache()
         return {"ok": True, "balance": new_bal}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -581,40 +656,12 @@ def api_admin_add_tx_by_student_id(admin_pin: str, student_id: str, memo: str, d
 def api_get_txs_by_student_id(student_id: str, limit=200):
     if not student_id:
         return {"ok": False, "error": "student_id가 없습니다."}
-    q = (
-        db.collection("transactions")
-        .where(filter=FieldFilter("student_id", "==", student_id))
-        .order_by("created_at", direction=firestore.Query.DESCENDING)
-        .limit(int(limit))
-        .stream()
-    )
-    rows = []
-    for d in q:
-        tx = d.to_dict() or {}
-        created_dt_utc = _to_utc_datetime(tx.get("created_at"))
-        amt = int(tx.get("amount", 0) or 0)
-        rows.append(
-            {
-                "tx_id": d.id,
-                "created_at_utc": created_dt_utc,
-                "created_at_kr": format_kr_datetime(created_dt_utc.astimezone(KST)) if created_dt_utc else "",
-                "memo": tx.get("memo", ""),
-                "type": tx.get("type", ""),
-                "amount": amt,
-                "deposit": amt if amt > 0 else 0,
-                "withdraw": -amt if amt < 0 else 0,
-                "balance_after": int(tx.get("balance_after", 0) or 0),
-            }
-        )
+    rows = _api_get_txs_by_student_id_cached(student_id, int(limit))
     return {"ok": True, "rows": rows}
 
 
 def api_get_balance(name, pin):
-    student_doc = fs_auth_student(name, pin)
-    if not student_doc:
-        return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
-    data = student_doc.to_dict() or {}
-    return {"ok": True, "balance": int(data.get("balance", 0) or 0), "student_id": student_doc.id}
+    return _api_get_balance_cached(name, pin)
 
 
 # =========================
@@ -638,6 +685,67 @@ def _get_student_no(student_id: str) -> int:
 
 
 def api_get_auction_state():
+    payload = _api_get_auction_state_cached()
+    if not payload.get("exists"):
+        return {"ok": True, "active": False}
+    d = payload.get("data") or {}
+    return {
+        "ok": True,
+        "active": bool(d.get("active", False)),
+        "round_id": d.get("round_id"),
+        "round_no": int(d.get("round_no", 0) or 0),
+        "bid_title": str(d.get("bid_title", "") or ""),
+        "opened_at": d.get("opened_at"),
+    }
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _api_get_auction_state_cached():
+    snap = _auction_state_ref().get()
+    return {"exists": bool(snap.exists), "data": (snap.to_dict() or {}) if snap.exists else {}}
+
+
+def clear_auction_state_cache():
+    _api_get_auction_state_cached.clear()
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _api_get_latest_closed_auction_round_id_cached():
+    try:
+        closed_docs = list(
+            db.collection("auction_rounds")
+            .where(filter=FieldFilter("status", "==", "closed"))
+            .order_by("round_no", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .stream()
+        )
+    except FailedPrecondition:
+        recent_rounds = list(
+            db.collection("auction_rounds")
+            .order_by("round_no", direction=firestore.Query.DESCENDING)
+            .limit(30)
+            .stream()
+        )
+        closed_docs = [doc for doc in recent_rounds if (doc.to_dict() or {}).get("status") == "closed"][:1]
+    return closed_docs[0].id if closed_docs else ""
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _api_get_my_bid_info_cached(round_id: str, student_id: str):
+    if not round_id or not student_id:
+        return {"exists": False}
+    snap = db.collection("auction_bids").document(f"{round_id}_{student_id}").get()
+    if not snap.exists:
+        return {"exists": False}
+    return {"exists": True, "data": snap.to_dict() or {}}
+
+
+def clear_auction_view_cache():
+    _api_get_latest_closed_auction_round_id_cached.clear()
+    _api_get_my_bid_info_cached.clear()
+
+
+def api_get_auction_state_uncached():
     snap = _auction_state_ref().get()
     if not snap.exists:
         return {"ok": True, "active": False}
@@ -668,7 +776,7 @@ def api_start_auction(admin_pin: str, bid_title: str):
     if not title:
         return {"ok": False, "error": "입찰 내역을 입력해 주세요."}
 
-    cur = api_get_auction_state()
+    cur = api_get_auction_state_uncached()
     if cur.get("active"):
         return {"ok": False, "error": "이미 진행 중인 경매가 있습니다."}
 
@@ -695,6 +803,8 @@ def api_start_auction(admin_pin: str, bid_title: str):
             "opened_at": opened_at,
         }
     )
+    clear_auction_state_cache()
+    clear_auction_view_cache()
     return {"ok": True, "round_no": int(round_no), "round_id": round_ref.id}
 
 
@@ -707,7 +817,7 @@ def api_submit_bid(name: str, pin: str, amount: int):
     if bid_amount <= 0:
         return {"ok": False, "error": "입찰 가격은 1 이상이어야 합니다."}
 
-    st_info = api_get_auction_state()
+    st_info = api_get_auction_state_uncached()
     if not st_info.get("active"):
         return {"ok": False, "error": "진행 중인 경매가 없습니다."}
 
@@ -768,6 +878,8 @@ def api_submit_bid(name: str, pin: str, amount: int):
 
     try:
         new_bal = _do(db.transaction())
+        clear_student_read_cache()
+        clear_auction_state_cache()
         return {"ok": True, "balance": int(new_bal)}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -786,6 +898,8 @@ def api_close_auction(admin_pin: str):
     round_ref = db.collection("auction_rounds").document(round_id)
     round_ref.update({"status": "closed", "closed_at": firestore.SERVER_TIMESTAMP})
     _auction_state_ref().set({"active": False, "round_id": None, "round_no": None, "bid_title": "", "opened_at": None})
+    clear_auction_state_cache()
+    clear_auction_view_cache()
     return {"ok": True}
 
 
@@ -831,7 +945,7 @@ def api_get_auction_results(round_id: str):
     }
 
 
-def api_reflect_auction_ledger(admin_pin: str, round_id: str):
+def api_reflect_auction_ledger(admin_pin: str, round_id: str, refund_non_winner: bool = False):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
     if not round_id:
@@ -846,10 +960,59 @@ def api_reflect_auction_ledger(admin_pin: str, round_id: str):
         return {"ok": False, "error": "이미 장부에 반영된 경매입니다."}
 
     bids = list(db.collection("auction_bids").where(filter=FieldFilter("round_id", "==", round_id)).stream())
-    total = 0
+    bid_rows = []
     for b in bids:
-        total += int((b.to_dict() or {}).get("amount", 0) or 0)
+        bx = b.to_dict() or {}
+        bid_rows.append(
+            {
+                "student_id": str(bx.get("student_id", "") or ""),
+                "student_name": str(bx.get("student_name", "") or ""),
+                "amount": int(bx.get("amount", 0) or 0),
+                "submitted_at": _to_utc_datetime(bx.get("submitted_at")),
+            }
+        )
 
+    total = sum(int(x.get("amount", 0) or 0) for x in bid_rows)
+    refunded_count = 0
+    refunded_total = 0
+
+    if refund_non_winner and bid_rows:
+        sorted_rows = sorted(
+            bid_rows,
+            key=lambda x: (-int(x.get("amount", 0) or 0), x.get("submitted_at") or datetime.max.replace(tzinfo=timezone.utc)),
+        )
+        winner = sorted_rows[0]
+        loser_rows = sorted_rows[1:]
+        refund_memo = f"경매 입찰금 반환 {int(rd.get('round_no', 0) or 0):02d}회차"
+
+        for loser in loser_rows:
+            sid = str(loser.get("student_id", "") or "")
+            refund_amount = int(loser.get("amount", 0) or 0)
+            if not sid or refund_amount <= 0:
+                continue
+
+            student_ref = db.collection("students").document(sid)
+            snap = student_ref.get()
+            if not snap.exists:
+                continue
+            bal = int((snap.to_dict() or {}).get("balance", 0) or 0)
+            new_bal = bal + refund_amount
+            student_ref.update({"balance": int(new_bal)})
+            db.collection("transactions").add(
+                {
+                    "student_id": sid,
+                    "type": "auction_bid_refund",
+                    "amount": int(refund_amount),
+                    "balance_after": int(new_bal),
+                    "memo": refund_memo,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+            refunded_count += 1
+            refunded_total += refund_amount
+
+        total = int(winner.get("amount", 0) or 0)
+        
     db.collection("auction_ledgers").add(
         {
             "round_id": round_id,
@@ -858,11 +1021,22 @@ def api_reflect_auction_ledger(admin_pin: str, round_id: str):
             "bid_date": rd.get("opened_at"),
             "participants": len(bids),
             "total_amount": int(total),
+            "refund_non_winner": bool(refund_non_winner),
+            "refunded_count": int(refunded_count),
+            "refunded_total": int(refunded_total),
             "created_at": firestore.SERVER_TIMESTAMP,
         }
     )
     round_ref.update({"ledger_reflected": True, "ledger_reflected_at": firestore.SERVER_TIMESTAMP})
-    return {"ok": True}
+    clear_auction_state_cache()
+    clear_auction_view_cache()
+    clear_student_read_cache()
+    return {
+        "ok": True,
+        "refund_non_winner": bool(refund_non_winner),
+        "refunded_count": int(refunded_count),
+        "refunded_total": int(refunded_total),
+    }
 
 
 def api_list_auction_ledgers(limit=50):
@@ -870,6 +1044,9 @@ def api_list_auction_ledgers(limit=50):
     rows = []
     for d in q:
         x = d.to_dict() or {}
+        refund_enabled = bool(x.get("refund_non_winner", False))
+        refunded_count = int(x.get("refunded_count", 0) or 0)
+        refunded_total = int(x.get("refunded_total", 0) or 0)
         rows.append(
             {
                 "입찰번호": int(x.get("round_no", 0) or 0),
@@ -877,6 +1054,9 @@ def api_list_auction_ledgers(limit=50):
                 "입찰내역": str(x.get("bid_title", "") or ""),
                 "입찰 참가수": int(x.get("participants", 0) or 0),
                 "총 액수": int(x.get("total_amount", 0) or 0),
+                "낙찰금 반환": "적용" if refund_enabled else "미적용",
+                "반환 인원": refunded_count,
+                "반환 금액": refunded_total,
             }
         )
     return {"ok": True, "rows": rows}
@@ -910,6 +1090,35 @@ def _normalize_lottery_numbers(nums) -> list[int]:
 
 
 def api_get_lottery_state():
+    payload = _api_get_lottery_state_cached()
+    if not payload.get("exists"):
+        return {"ok": True, "active": False}
+    d = payload.get("data") or {}
+    return {
+        "ok": True,
+        "active": bool(d.get("active", False)),
+        "round_id": str(d.get("round_id", "") or ""),
+        "round_no": int(d.get("round_no", 0) or 0),
+        "price": int(d.get("price", 20) or 20),
+        "tax_rate": int(d.get("tax_rate", 40) or 40),
+        "first_pct": int(d.get("first_pct", 80) or 80),
+        "second_pct": int(d.get("second_pct", 20) or 20),
+        "third_prize": int(d.get("third_prize", 20) or 20),
+        "draw_numbers": d.get("draw_numbers") or [],
+    }
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _api_get_lottery_state_cached():
+    snap = _lottery_state_ref().get()
+    return {"exists": bool(snap.exists), "data": (snap.to_dict() or {}) if snap.exists else {}}
+
+
+def clear_lottery_state_cache():
+    _api_get_lottery_state_cached.clear()
+
+
+def _api_get_lottery_state_uncached():
     snap = _lottery_state_ref().get()
     if not snap.exists:
         return {"ok": True, "active": False}
@@ -954,7 +1163,7 @@ def api_start_lottery(admin_pin: str, price: int, tax_rate: int, first_pct: int,
     if third_prize < 0:
         return {"ok": False, "error": "3등 당첨금은 0 이상이어야 합니다."}
 
-    cur = api_get_lottery_state()
+    cur = _api_get_lottery_state_uncached()
     if cur.get("active"):
         return {"ok": False, "error": "이미 진행 중인 복권이 있습니다."}
 
@@ -991,6 +1200,7 @@ def api_start_lottery(admin_pin: str, price: int, tax_rate: int, first_pct: int,
             "opened_at": firestore.SERVER_TIMESTAMP,
         }
     )
+    clear_lottery_state_cache()
     return {"ok": True, "round_no": int(round_no)}
 
 
@@ -1104,6 +1314,8 @@ def api_buy_lottery(name: str, pin: str, numbers: list[int]):
 
     try:
         new_bal = _do(db.transaction())
+        clear_student_read_cache()
+        get_my_lottery_entries_cached.clear()
         return {"ok": True, "balance": int(new_bal)}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -1114,12 +1326,13 @@ def api_buy_lottery(name: str, pin: str, numbers: list[int]):
 def api_close_lottery(admin_pin: str):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
-    st_info = api_get_lottery_state()
+    st_info = _api_get_lottery_state_uncached()
     if not st_info.get("active"):
         return {"ok": False, "error": "진행 중인 복권이 없습니다."}
     round_id = st_info.get("round_id")
     db.collection("lottery_rounds").document(round_id).update({"status": "closed", "closed_at": firestore.SERVER_TIMESTAMP})
     _lottery_state_ref().update({"active": False})
+    clear_lottery_state_cache()
     return {"ok": True}
 
 
@@ -1144,6 +1357,79 @@ def api_list_lottery_entries(round_id: str):
     return {"ok": True, "rows": rows}
 
 
+def api_lottery_entry_summary(round_id: str):
+    rid = str(round_id or "")
+    if not rid:
+        return {"ok": True, "participants": 0, "ticket_count": 0, "total_amount": 0}
+
+    round_snap = db.collection("lottery_rounds").document(rid).get()
+    if not round_snap.exists:
+        return {"ok": False, "error": "회차 정보를 찾을 수 없습니다."}
+
+    rd = round_snap.to_dict() or {}
+    ticket_price = int(rd.get("price", rd.get("ticket_price", 20)) or 20)
+    entries = list(db.collection("lottery_entries").where(filter=FieldFilter("round_id", "==", rid)).stream())
+    participants = set()
+    for e in entries:
+        x = e.to_dict() or {}
+        sid = str(x.get("student_id", "") or "").strip()
+        if sid:
+            participants.add(sid)
+    ticket_count = len(entries)
+    return {
+        "ok": True,
+        "participants": len(participants),
+        "ticket_count": int(ticket_count),
+        "total_amount": int(ticket_count * ticket_price),
+    }
+
+
+def api_admin_join_lottery(admin_pin: str, join_count: int):
+    if not is_admin_pin(admin_pin):
+        return {"ok": False, "error": "관리자 PIN이 틀립니다."}
+
+    join_count = int(join_count or 0)
+    if join_count <= 0:
+        return {"ok": False, "error": "참여 횟수는 1 이상이어야 합니다."}
+
+    st_info = _api_get_lottery_state_uncached()
+    if not st_info.get("active"):
+        return {"ok": False, "error": "개시된 복권이 없습니다."}
+
+    round_id = str(st_info.get("round_id", "") or "")
+    round_no = int(st_info.get("round_no", 0) or 0)
+    price = int(st_info.get("price", 20) or 20)
+
+    round_ref = db.collection("lottery_rounds").document(round_id)
+    r_snap = round_ref.get()
+    if not r_snap.exists:
+        return {"ok": False, "error": "회차 정보를 찾을 수 없습니다."}
+    rd = r_snap.to_dict() or {}
+    if str(rd.get("status", "")) != "open":
+        return {"ok": False, "error": "진행 중인 복권이 없습니다."}
+
+    batch = db.batch()
+    for _ in range(join_count):
+        nums = sorted(random.sample(range(1, 21), 4))
+        ref = db.collection("lottery_entries").document()
+        batch.set(
+            ref,
+            {
+                "round_id": round_id,
+                "round_no": int(round_no),
+                "student_id": "__admin__",
+                "student_no": 0,
+                "student_name": ADMIN_NAME,
+                "numbers": nums,
+                "submitted_at": firestore.SERVER_TIMESTAMP,
+                "ticket_price": int(price),
+            },
+        )
+    batch.commit()
+    get_my_lottery_entries_cached.clear()
+    return {"ok": True, "count": int(join_count)}
+
+        
 def api_submit_lottery_draw(admin_pin: str, draw_numbers: list[int]):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
@@ -1241,6 +1527,7 @@ def api_submit_lottery_draw(admin_pin: str, draw_numbers: list[int]):
         }
     )
     _lottery_state_ref().update({"draw_numbers": nums})
+    clear_lottery_state_cache()
     return {"ok": True}
 
 
@@ -1285,12 +1572,19 @@ def api_pay_lottery_prizes(admin_pin: str, round_id: str):
         if not student_id or prize <= 0:
             d.reference.update({"paid": True, "paid_at": firestore.SERVER_TIMESTAMP})
             continue
+        if student_id == "__admin__" or "/" in student_id:
+            d.reference.update({"paid": True, "paid_at": firestore.SERVER_TIMESTAMP})
+            continue
         student_ref = db.collection("students").document(student_id)
+        snap = student_ref.get()
+        if not snap.exists:
+            d.reference.update({"paid": True, "paid_at": firestore.SERVER_TIMESTAMP})
+            continue
         tx_ref = db.collection("transactions").document()
         @firestore.transactional
         def _do(transaction):
-            snap = student_ref.get(transaction=transaction)
-            bal = int((snap.to_dict() or {}).get("balance", 0) or 0)
+            tx_snap = student_ref.get(transaction=transaction)
+            bal = int((tx_snap.to_dict() or {}).get("balance", 0) or 0)
             new_bal = bal + prize
             transaction.update(student_ref, {"balance": new_bal})
             transaction.set(tx_ref, {
@@ -1305,6 +1599,7 @@ def api_pay_lottery_prizes(admin_pin: str, round_id: str):
         d.reference.update({"paid": True, "paid_at": firestore.SERVER_TIMESTAMP})
         paid_count += 1
     db.collection("lottery_rounds").document(str(round_id)).update({"prizes_paid": True})
+    clear_student_read_cache()
     return {"ok": True, "count": paid_count}
 
 
@@ -1366,6 +1661,7 @@ def api_reflect_lottery_ledger(admin_pin: str, round_id: str):
         }
     )
     round_ref.update({"ledger_reflected": True, "ledger_reflected_at": firestore.SERVER_TIMESTAMP})
+    clear_lottery_state_cache()
     return {"ok": True}
 
 
@@ -1533,26 +1829,7 @@ def api_admin_rollback_selected(admin_pin: str, student_id: str, tx_ids: list[st
 # Savings
 # =========================
 def api_savings_list_by_student_id(student_id: str):
-    docs = (
-        db.collection("savings")
-        .where(filter=FieldFilter("student_id", "==", student_id))
-        .order_by("start_date", direction=firestore.Query.DESCENDING)
-        .limit(50)
-        .stream()
-    )
-    out = []
-    for d in docs:
-        s = d.to_dict() or {}
-        out.append(
-            {
-                "savings_id": d.id,
-                "principal": int(s.get("principal", 0) or 0),
-                "weeks": int(s.get("weeks", 0) or 0),
-                "interest": int(s.get("interest", 0) or 0),
-                "maturity_date": _to_utc_datetime(s.get("maturity_date")),
-                "status": s.get("status", "active"),
-            }
-        )
+    out = _api_savings_list_by_student_id_cached(student_id)
     return {"ok": True, "savings": out}
 
 
@@ -1620,6 +1897,7 @@ def api_savings_create(name, pin, principal, weeks):
 
     try:
         interest2, maturity_dt = _do(db.transaction())
+        clear_student_read_cache()
         return {"ok": True, "interest": interest2, "maturity_datetime": maturity_dt}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -1676,6 +1954,7 @@ def api_savings_cancel(name, pin, savings_id):
 
     try:
         refunded = _do(db.transaction())
+        clear_student_read_cache()
         return {"ok": True, "refunded": refunded}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -1743,6 +2022,7 @@ def api_process_maturities(name, pin):
         matured_count += 1
         paid_total += amount
 
+    clear_student_read_cache()
     return {"ok": True, "matured_count": matured_count, "paid_total": paid_total}
 
 
@@ -4609,18 +4889,56 @@ def render_lottery_admin():
     else:
         st.info("개시된 복권이 없습니다.")
 
+    st.markdown("### 👑 관리자 복권 참여")
+    ad1, ad2 = st.columns([2, 1])
+    with ad1:
+        admin_join_count = st.number_input("복권 참여 수", min_value=1, value=1, step=1, key="lot_admin_join_count")
+    with ad2:
+        st.caption("")
+        if st.button("복권 참여", use_container_width=True, key="lottery_admin_join_btn"):
+            res = api_admin_join_lottery(ADMIN_PIN, int(admin_join_count))
+            if res.get("ok"):
+                toast(f"관리자 복권 참여 완료 ({int(res.get('count', 0))}건)", icon="🎟️")
+                st.rerun()
+            else:
+                st.error(res.get("error", "관리자 복권 참여 실패"))
+
     st.markdown("### 📝 복권 참여 결과")
     rrid = str(st_info.get("round_id", "") or "")
+    round_status = ""
     if rrid:
+        r_snap = db.collection("lottery_rounds").document(rrid).get()
+        if r_snap.exists:
+            round_status = str((r_snap.to_dict() or {}).get("status", "") or "")
+
+    if rrid and round_status == "closed":
+        summary = api_lottery_entry_summary(rrid)
+        if summary.get("ok"):
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "참여자수": int(summary.get("participants", 0) or 0),
+                            "참여 복권수": int(summary.get("ticket_count", 0) or 0),
+                            "총 액수": int(summary.get("total_amount", 0) or 0),
+                        }
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+            
         ent = api_list_lottery_entries(rrid)
         df_ent = pd.DataFrame(ent.get("rows", [])) if ent.get("ok") else pd.DataFrame()
         if not df_ent.empty:
             st.dataframe(df_ent[["참여 일시", "이름", "복권 참여 번호"]], use_container_width=True, hide_index=True)
         else:
-            st.info("개시된 복권이 없습니다.")
+            st.info("참여 내역이 없습니다.")
+    elif rrid and round_status == "open":
+        st.info("복권 마감 후 참여 결과가 표시됩니다.")
     else:
-        st.info("개시된 복권이 없습니다.")
-
+        st.info("회차 정보가 없습니다.")
+        
     st.markdown("### 🎰 복권 추첨하기")
     d1, d2, d3, d4 = st.columns(4)
     with d1:
@@ -4790,6 +5108,8 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
             st.dataframe(pd.DataFrame(view_rows), use_container_width=True, hide_index=True)
         else:
             st.info("아직 구매 내역이 없습니다.")
+    else:
+        st.info("개시된 복권이 없습니다.")
 
 # =========================
 # 관리자 화면
@@ -5416,29 +5736,12 @@ if st.session_state.admin_ok:
 
         st.markdown("### 📊 경매 결과")
 
-        try:
-            closed_docs = list(
-                db.collection("auction_rounds")
-                .where(filter=FieldFilter("status", "==", "closed"))
-                .order_by("round_no", direction=firestore.Query.DESCENDING)
-                .limit(1)
-                .stream()
-            )
-        except FailedPrecondition:
-            # 복합 인덱스가 아직 준비되지 않은 환경(Streamlit Cloud 등)용 폴백.
-            # round_no 최신순으로 일부 문서를 가져와서 status=closed를 앱에서 필터링한다.
-            recent_rounds = list(
-                db.collection("auction_rounds")
-                .order_by("round_no", direction=firestore.Query.DESCENDING)
-                .limit(30)
-                .stream()
-            )
-            closed_docs = [doc for doc in recent_rounds if (doc.to_dict() or {}).get("status") == "closed"][:1]
+        latest_closed_round_id = _api_get_latest_closed_auction_round_id_cached()
 
-        if not closed_docs:
+        if not latest_closed_round_id:
             st.info("개시된 경매가 없습니다.")
         else:
-            latest_round_id = closed_docs[0].id
+            latest_round_id = latest_closed_round_id
             rr = api_get_auction_results(latest_round_id)
             if rr.get("ok"):
                 rd = rr.get("round", {})
@@ -5467,10 +5770,9 @@ if st.session_state.admin_ok:
                         out = io.BytesIO(df_rr.to_csv(index=False).encode("utf-8-sig"))
                         excel_mime = "text/csv"
                         excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.csv"
-                        st.warning("엑셀 저장 엔진을 찾지 못해 CSV 파일로 저장합니다.")
 
                     out.seek(0)
-                    b_x, b_l = st.columns(2)
+                    b_x, b_c, b_l = st.columns([1, 1, 1])
                     with b_x:
                         st.download_button(
                             "엑셀저장",
@@ -5480,12 +5782,27 @@ if st.session_state.admin_ok:
                             use_container_width=True,
                             key="auction_excel_btn",
                         )
+                    with b_c:
+                        refund_non_winner = st.checkbox(
+                            "낙찰금 반환",
+                            key="auction_refund_non_winner",
+                        )
                     with b_l:
                         if st.button("장부반영", use_container_width=True, key="auction_ledger_btn"):
-                            res = api_reflect_auction_ledger(ADMIN_PIN, latest_round_id)
+                            res = api_reflect_auction_ledger(
+                                ADMIN_PIN,
+                                latest_round_id,
+                                refund_non_winner=bool(refund_non_winner),
+                            )
                             if res.get("ok"):
-                                toast("경매 관리 장부 반영 완료", icon="📒")
-                                st.rerun()
+                                if bool(res.get("refund_non_winner", False)):
+                                    toast(
+                                        f"경매 관리 장부 반영 완료 · 반환 {int(res.get('refunded_count', 0) or 0)}명 / {int(res.get('refunded_total', 0) or 0)}원",
+                                        icon="📒",
+                                    )
+                                else:
+                                    toast("경매 관리 장부 반영 완료", icon="📒")
+                                    st.rerun()
                             else:
                                 st.error(res.get("error", "장부 반영 실패"))
             else:
@@ -5560,7 +5877,7 @@ mat = maybe_check_maturities(name, pin)
 if mat and mat.get("ok") and mat.get("matured_count", 0) > 0:
     st.success(f"🎉 만기 도착! 적금 {mat['matured_count']}건 자동 반환 (+{mat['paid_total']} 포인트)")
 
-refresh_account_data(name, pin, force=True)
+refresh_account_data(name, pin, force=False)
 slot = st.session_state.data.get(name, {})
 if slot.get("error"):
     st.error(slot["error"])
@@ -5814,9 +6131,9 @@ with sub4:
         st.caption(f"- 입찰이름: {bid_title}")
         st.caption(f"- 입찰자 정보: 입찰자 {name}")
 
-        my_bid_doc = db.collection("auction_bids").document(f"{ast.get('round_id')}_{str(student_id or '')}").get()
-        if my_bid_doc.exists:
-            bd = my_bid_doc.to_dict() or {}
+        my_bid = _api_get_my_bid_info_cached(str(ast.get("round_id") or ""), str(student_id or ""))
+        if my_bid.get("exists"):
+            bd = my_bid.get("data") or {}
             st.success(
                 f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
             )
@@ -5841,8 +6158,3 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
-
-
-
-
-
