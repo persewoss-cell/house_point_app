@@ -5003,11 +5003,11 @@ def render_lottery_admin():
                     else:
                         st.error(rl.get("error", "장부 반영 실패"))
 
-        ws = api_get_lottery_winners(rrid)␊
-        df_w = pd.DataFrame(ws.get("rows", [])) if ws.get("ok") else pd.DataFrame()␊
-        if not df_w.empty:␊
-            draw_caption = ", ".join(f"{int(n):02d}" for n in (st_info.get("draw_numbers") or []))␊
-            if draw_caption:␊
+        ws = api_get_lottery_winners(rrid)
+        df_w = pd.DataFrame(ws.get("rows", [])) if ws.get("ok") else pd.DataFrame()
+        if not df_w.empty:
+            draw_caption = ", ".join(f"{int(n):02d}" for n in (st_info.get("draw_numbers") or []))
+            if draw_caption:
                 st.caption(f"회차 {int(st_info.get('round_no', 0))} | 당첨번호: {draw_caption}")
             table_rows = []
             for _, row in df_w.iterrows():
@@ -6192,6 +6192,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
