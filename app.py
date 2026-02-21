@@ -4986,6 +4986,19 @@ def render_lottery_admin():
 
     st.markdown("### 🎉 당첨자 확인")
     if rrid:
+        def render_lottery_pay_and_ledger_button():
+            if st.button("당첨금 지급 및 장부 반영", use_container_width=True, key="lottery_pay_and_ledger_btn"):
+                rp = api_pay_lottery_prizes(ADMIN_PIN, rrid)
+                if not rp.get("ok"):
+                    st.error(rp.get("error", "당첨금 지급 실패"))
+                else:
+                    rl = api_reflect_lottery_ledger(ADMIN_PIN, rrid)
+                    if rl.get("ok"):
+                        toast(f"당첨금 지급 및 장부 반영 완료 ({int(rp.get('count', 0))}건)", icon="📒")
+                        st.rerun()
+                    else:
+                        st.error(rl.get("error", "장부 반영 실패"))
+
         ws = api_get_lottery_winners(rrid)
         df_w = pd.DataFrame(ws.get("rows", [])) if ws.get("ok") else pd.DataFrame()
         if not df_w.empty:
@@ -5021,20 +5034,10 @@ def render_lottery_admin():
                 "</table>"
             )
             st.markdown(winners_html, unsafe_allow_html=True)
-            
-            if st.button("당첨금 지급 및 장부 반영", use_container_width=True, key="lottery_pay_and_ledger_btn"):
-                rp = api_pay_lottery_prizes(ADMIN_PIN, rrid)
-                if not rp.get("ok"):
-                    st.error(rp.get("error", "당첨금 지급 실패"))
-                else:
-                    rl = api_reflect_lottery_ledger(ADMIN_PIN, rrid)
-                    if rl.get("ok"):
-                        toast(f"당첨금 지급 및 장부 반영 완료 ({int(rp.get('count', 0))}건)", icon="📒")
-                        st.rerun()
-                    else:
-                        st.error(rl.get("error", "장부 반영 실패"))
+            render_lottery_pay_and_ledger_button()
         else:
             st.info("당첨자가 없습니다.")
+            render_lottery_pay_and_ledger_button()
     else:
         st.info("회차 정보가 없습니다.")
 
@@ -6182,4 +6185,5 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
