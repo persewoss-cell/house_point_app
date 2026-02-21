@@ -1398,7 +1398,7 @@ def api_lottery_entry_summary(round_id: str):
 def _render_lottery_join_status(summary: dict):
     ticket_count = int(summary.get("ticket_count", 0) or 0)
     total_amount = int(summary.get("total_amount", 0) or 0)
-    st.markdown(f"### 복권 참여수 {ticket_count:02d}  |  총액 {total_amount}  |")
+    st.success(f"복권 참여수 {ticket_count:02d}  |  총액 {total_amount}")
 
 
 def api_admin_join_lottery(admin_pin: str, join_count: int):
@@ -6182,3 +6182,4 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
