@@ -4936,7 +4936,6 @@ def render_lottery_admin():
     if rrid and round_status == "closed":
         summary = api_lottery_entry_summary(rrid)
         if summary.get("ok"):
-            _render_lottery_join_status(summary)
             st.dataframe(
                 pd.DataFrame(
                     [
@@ -6192,6 +6191,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
