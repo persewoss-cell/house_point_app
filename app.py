@@ -5891,7 +5891,7 @@ if st.session_state.admin_ok:
                                     st.rerun()
                                 else:
                                     st.error(res.get("error", "장부 반영 실패"))
-                                else:
+            else:
                 st.error(rr.get("error", "경매 결과 조회 실패"))
 
         st.markdown("### 📚 경매 관리 장부")
@@ -6252,6 +6252,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
