@@ -49,6 +49,11 @@ st.session_state.setdefault("tpl_sort_mode", "기본")
 st.session_state.setdefault("tpl_mobile_sort_ui", False)
 st.session_state.setdefault("tpl_work_ids", [])
 st.session_state.setdefault("auction_refund_non_winner", True)
+st.session_state.setdefault("auction_result_visible", False)
+st.session_state.setdefault("auction_refund_no", False)
+st.session_state.setdefault("auction_refund_yes", False)
+st.session_state.setdefault("lottery_result_visible", False)
+st.session_state.setdefault("lottery_winners_visible", False)
 
 
 # =========================
@@ -4887,6 +4892,8 @@ def render_lottery_admin():
         if st.button("개시", use_container_width=True, key="lottery_open_btn"):
             res = api_start_lottery(ADMIN_PIN, int(price), int(tax_rate), int(first_pct), int(second_pct), int(third_prize))
             if res.get("ok"):
+                st.session_state["lottery_result_visible"] = False
+                st.session_state["lottery_winners_visible"] = False
                 toast(f"복권 {int(res.get('round_no', 0))}회차 개시", icon="🎉")
                 st.rerun()
             else:
@@ -4895,6 +4902,7 @@ def render_lottery_admin():
         if st.button("마감", use_container_width=True, key="lottery_close_btn"):
             res = api_close_lottery(ADMIN_PIN)
             if res.get("ok"):
+                st.session_state["lottery_result_visible"] = True
                 toast("복권 마감 완료", icon="✅")
                 st.rerun()
             else:
@@ -4907,33 +4915,37 @@ def render_lottery_admin():
         st.info("개시된 복권이 없습니다.")
 
     st.markdown("### 👑 관리자 복권 참여")
-    ad1, ad2 = st.columns([2, 1])
-    with ad1:
-        admin_join_count = st.number_input("복권 참여 수", min_value=1, value=1, step=1, key="lot_admin_join_count")
-    with ad2:
-        st.caption("")
-        if st.button("복권 참여", use_container_width=True, key="lottery_admin_join_btn"):
-            res = api_admin_join_lottery(ADMIN_PIN, int(admin_join_count))
-            if res.get("ok"):
-                toast(f"관리자 복권 참여 완료 ({int(res.get('count', 0))}건)", icon="🎟️")
-                st.rerun()
-            else:
-                st.error(res.get("error", "관리자 복권 참여 실패"))
+    if not st_info.get("active"):
+        st.info("개시된 복권이 없습니다")
+    else:
+        ad1, ad2 = st.columns([2, 1])
+        with ad1:
+            admin_join_count = st.number_input("복권 참여 수", min_value=1, value=1, step=1, key="lot_admin_join_count")
+        with ad2:
+            st.caption("")
+            if st.button("복권 참여", use_container_width=True, key="lottery_admin_join_btn"):
+                res = api_admin_join_lottery(ADMIN_PIN, int(admin_join_count))
+                if res.get("ok"):
+                    toast(f"관리자 복권 참여 완료 ({int(res.get('count', 0))}건)", icon="🎟️")
+                    st.rerun()
+                else:
+                    st.error(res.get("error", "관리자 복권 참여 실패"))
+
+        rrid_open = str(st_info.get("round_id", "") or "")
+        if rrid_open:
+            summary_open = api_lottery_entry_summary(rrid_open)
+            if summary_open.get("ok"):
+                _render_lottery_join_status(summary_open)
 
     rrid = str(st_info.get("round_id", "") or "")
-    if rrid:
-        summary_open = api_lottery_entry_summary(rrid)
-        if summary_open.get("ok"):
-            _render_lottery_join_status(summary_open)
-
-    st.markdown("### 📝 복권 참여 결과")
     round_status = ""
     if rrid:
         r_snap = db.collection("lottery_rounds").document(rrid).get()
         if r_snap.exists:
             round_status = str((r_snap.to_dict() or {}).get("status", "") or "")
 
-    if rrid and round_status == "closed":
+    st.markdown("### 📝 복권 참여 결과")
+    if rrid and round_status == "closed" and bool(st.session_state.get("lottery_result_visible", False)):
         summary = api_lottery_entry_summary(rrid)
         if summary.get("ok"):
             st.dataframe(
@@ -4956,10 +4968,8 @@ def render_lottery_admin():
             st.dataframe(df_ent[["참여 일시", "이름", "복권 참여 번호"]], use_container_width=True, hide_index=True)
         else:
             st.info("참여 내역이 없습니다.")
-    elif rrid and round_status == "open":
-        st.info("복권 마감 후 참여 결과가 표시됩니다.")
     else:
-        st.info("회차 정보가 없습니다.")
+        st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
         
     st.markdown("### 🎰 복권 추첨하기")
     d1, d2, d3, d4 = st.columns(4)
@@ -4978,13 +4988,14 @@ def render_lottery_admin():
     if st.button("당첨번호 제출", use_container_width=True, key="lottery_draw_submit"):
         res = api_submit_lottery_draw(ADMIN_PIN, draw_nums)
         if res.get("ok"):
+            st.session_state["lottery_winners_visible"] = True
             toast("당첨번호 제출 완료", icon="🎯")
             st.rerun()
         else:
             st.error(res.get("error", "당첨번호 제출 실패"))
 
     st.markdown("### 🎉 당첨자 확인")
-    if rrid:
+    if rrid and bool(st.session_state.get("lottery_winners_visible", False)):
         has_draw_numbers = len(st_info.get("draw_numbers") or []) == 4
 
         def render_lottery_pay_and_ledger_button():
@@ -4997,6 +5008,8 @@ def render_lottery_admin():
                 else:
                     rl = api_reflect_lottery_ledger(ADMIN_PIN, rrid)
                     if rl.get("ok"):
+                        st.session_state["lottery_result_visible"] = False
+                        st.session_state["lottery_winners_visible"] = False
                         toast(f"당첨금 지급 및 장부 반영 완료 ({int(rp.get('count', 0))}건)", icon="📒")
                         st.rerun()
                     else:
@@ -5045,8 +5058,8 @@ def render_lottery_admin():
                 st.info("당첨번호 제출 후 당첨자를 확인할 수 있습니다.")
             render_lottery_pay_and_ledger_button()
     else:
-        st.info("회차 정보가 없습니다.")
-
+        st.info("당첨 번호 제출 버튼을 눌러야 당첨 결과가 표시됩니다.")
+        
     st.markdown("### 📒 복권 관리 장부")
     lg = api_list_lottery_ledgers(limit=100)
     df_lg = pd.DataFrame(lg.get("rows", [])) if lg.get("ok") else pd.DataFrame()
@@ -5745,6 +5758,9 @@ if st.session_state.admin_ok:
             if st.button("개시", key="auction_start_btn", use_container_width=True):
                 res = api_start_auction(ADMIN_PIN, bid_title_admin)
                 if res.get("ok"):
+                    st.session_state["auction_result_visible"] = False
+                    st.session_state["auction_refund_no"] = False
+                    st.session_state["auction_refund_yes"] = False
                     toast(f"경매 {int(res.get('round_no', 0)):02d}회차 개시", icon="🏁")
                     st.rerun()
                 else:
@@ -5753,6 +5769,7 @@ if st.session_state.admin_ok:
             if st.button("마감", key="auction_close_btn", use_container_width=True):
                 res = api_close_auction(ADMIN_PIN)
                 if res.get("ok"):
+                    st.session_state["auction_result_visible"] = True
                     toast("경매 마감 완료", icon="✅")
                     st.rerun()
                 else:
@@ -5766,12 +5783,17 @@ if st.session_state.admin_ok:
         else:
             st.info("개시된 경매가 없습니다.")
 
+        if st.button("경매 결과 보기", use_container_width=True, key="auction_show_result_btn"):
+            st.session_state["auction_result_visible"] = True
+
         st.markdown("### 📊 경매 결과")
 
         latest_closed_round_id = _api_get_latest_closed_auction_round_id_cached()
 
         if not latest_closed_round_id:
-            st.info("개시된 경매가 없습니다.")
+            st.info("경매 마감 후 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
+        elif not bool(st.session_state.get("auction_result_visible", False)):
+            st.info("경매 마감 후 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
         else:
             latest_round_id = latest_closed_round_id
             rr = api_get_auction_results(latest_round_id)
@@ -5783,6 +5805,21 @@ if st.session_state.admin_ok:
                 df_rr = pd.DataFrame(rr.get("rows", []))
                 if "번호" in df_rr.columns:
                     df_rr = df_rr.drop(columns=["번호"])
+
+                participants = len(df_rr)
+                total_amount = int(df_rr["입찰 가격"].sum()) if (not df_rr.empty and "입찰 가격" in df_rr.columns) else 0
+                summary_df = pd.DataFrame(
+                    [{
+                        "참여자수": int(participants),
+                        "참여 복권 수": "-",
+                        "총 액수": int(total_amount) if total_amount > 0 else "-",
+                        "당첨금 지급 총액": "-",
+                        "세금": "-",
+                        "사회기부금": "-",
+                    }]
+                )
+                st.dataframe(summary_df, use_container_width=True, hide_index=True)
+                
                 if df_rr.empty:
                     st.info("제출된 입찰표가 없습니다.")
                 else:
@@ -5804,8 +5841,9 @@ if st.session_state.admin_ok:
                         excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.csv"
 
                     out.seek(0)
-                    b_x, b_c, b_l = st.columns([1, 1, 1])
-                    with b_x:
+                b_x, b_opt1, b_opt2, b_l = st.columns([1.4, 1, 1.2, 1])
+                with b_x:
+                    if not df_rr.empty:
                         st.download_button(
                             "엑셀저장",
                             data=out,
@@ -5814,19 +5852,39 @@ if st.session_state.admin_ok:
                             use_container_width=True,
                             key="auction_excel_btn",
                         )
-                    with b_c:
-                        refund_non_winner = st.checkbox(
-                            "낙찰금 반환",
-                            key="auction_refund_non_winner",
-                        )
-                    with b_l:
-                        if st.button("장부반영", use_container_width=True, key="auction_ledger_btn"):
+                with b_opt1:
+                    refund_no = st.checkbox("낙찰금 미반환", key="auction_refund_no")
+                with b_opt2:
+                    refund_yes = st.checkbox("낙찰금 반환(반환액 90%)", key="auction_refund_yes")
+
+                if refund_no and refund_yes:
+                    changed = st.session_state.get("auction_refund_last", "")
+                    if changed == "yes":
+                        st.session_state["auction_refund_no"] = False
+                        refund_no = False
+                    else:
+                        st.session_state["auction_refund_yes"] = False
+                        refund_yes = False
+
+                if refund_no:
+                    st.session_state["auction_refund_last"] = "no"
+                elif refund_yes:
+                    st.session_state["auction_refund_last"] = "yes"
+
+                with b_l:
+                    if st.button("장부 반영", use_container_width=True, key="auction_ledger_btn"):
+                        if not refund_no and not refund_yes:
+                            st.warning("낙찰금 반환 여부를 선택 후 장부 반영 버튼을 눌러 주세요")
+                        else:
                             res = api_reflect_auction_ledger(
                                 ADMIN_PIN,
                                 latest_round_id,
-                                refund_non_winner=bool(refund_non_winner),
+                                refund_non_winner=bool(refund_yes),
                             )
                             if res.get("ok"):
+                                st.session_state["auction_result_visible"] = False
+                                st.session_state["auction_refund_no"] = False
+                                st.session_state["auction_refund_yes"] = False
                                 if bool(res.get("refund_non_winner", False)):
                                     toast(
                                         f"경매 관리 장부 반영 완료 · 반환 {int(res.get('refunded_count', 0) or 0)}명 / {int(res.get('refunded_total', 0) or 0)}원",
@@ -5834,7 +5892,7 @@ if st.session_state.admin_ok:
                                     )
                                 else:
                                     toast("경매 관리 장부 반영 완료", icon="📒")
-                                    st.rerun()
+                                st.rerun()
                             else:
                                 st.error(res.get("error", "장부 반영 실패"))
             else:
@@ -6151,13 +6209,13 @@ with sub4:
     st.subheader("🏷️ 경매 참여하기")
     ast = api_get_auction_state()
 
+    st.markdown("### 📝 입찰표")
     if not ast.get("active"):
-        st.info("현재 진행 중인 경매가 없습니다.")
+        st.info("개시된 경매가 없습니다.")
     else:
         round_no = int(ast.get("round_no", 0) or 0)
         bid_title = str(ast.get("bid_title", "") or "")
 
-        st.markdown("### 📝 입찰표")
         st.caption(f"- 입찰기일: {format_kr_datetime_seconds(ast.get('opened_at'))}")
         st.caption(f"- 입찰번호: {round_no:02d}")
         st.caption(f"- 입찰이름: {bid_title}")
@@ -6169,6 +6227,14 @@ with sub4:
             st.success(
                 f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
             )
+
+    st.markdown("### ✋경매 참여하기")
+    if not ast.get("active"):
+        st.info("개시된 경매가 없습니다.")
+    else:
+        my_bid = _api_get_my_bid_info_cached(str(ast.get("round_id") or ""), str(student_id or ""))
+        if my_bid.get("exists"):
+            st.info("이미 입찰표를 제출했습니다.")
         else:
             bid_amount = st.number_input("입찰 가격(포인트)", min_value=0, step=1, key=f"user_bid_amt_{name}")
             yes_no = st.radio("입찰표를 제출하시겠습니까?", ["아니오", "예"], horizontal=True, key=f"user_bid_yn_{name}")
@@ -6191,6 +6257,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
