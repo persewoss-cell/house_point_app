@@ -358,13 +358,13 @@ def _is_savings_memo(memo: str) -> bool:
     return ("적금 가입" in memo) or ("적금 해지" in memo) or ("적금 만기" in memo)
 
 
-def render_asset_summary(balance_now: int, savings_list: list[dict]):
+def render_asset_summary(balance_now: int, savings_list: list[dict], invest_now: int = 0):
     sv_total = sum(
         int(s.get("principal", 0) or 0)
         for s in (savings_list or [])
         if str(s.get("status", "")).lower().strip() == "active"
     )
-    asset_total = int(balance_now) + int(sv_total)
+    asset_total = int(balance_now) + int(sv_total) + int(invest_now or 0)
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric("총 자산", f"{asset_total}")
@@ -5738,7 +5738,7 @@ if st.session_state.admin_ok:
                 bal_now = int(a.get("balance", 0) or 0)
 
                 st.subheader(f"👤 {nm}")
-                render_asset_summary(bal_now, savings)
+                render_asset_summary(bal_now, savings, invest_now=int(_inv_total or 0))
 
                 _inv_principal_text, _inv_principal_total = _get_invest_principal_by_student_id(str(sid))
                 r2 = st.columns(3)
@@ -5937,18 +5937,18 @@ if st.session_state.admin_ok:
             savings = sres.get("savings", []) if sres.get("ok") else []
             sv_total = savings_active_total(savings)
             bal_now = int(a.get("balance", 0) or 0)
-            asset_total = bal_now + sv_total
 
             # ✅ 직업/투자(원금/현재평가) 요약
             _role = _get_role_name_by_student_id(str(sid))
             _inv_text, _inv_total = _get_invest_summary_by_student_id(str(sid))
+            asset_total = bal_now + sv_total + int(_inv_total or 0)
             _inv_principal_text, _inv_principal_total = _get_invest_principal_by_student_id(str(sid))
 
             with st.expander(
                 f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total} · 투자원금 {int(_inv_principal_total)} · 현재평가금 {int(_inv_total)}",
                 expanded=False,
             ):
-                render_asset_summary(bal_now, savings)
+                render_asset_summary(bal_now, savings, invest_now=int(_inv_total or 0))
 
                 # ✅ (PATCH) 전체통장에서도 직업/투자 정보를 다음 줄에 표시
                 r2 = st.columns(3)
@@ -6265,16 +6265,3 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
-
-
-
-
-
-
-
-
-
-
-
-
-
