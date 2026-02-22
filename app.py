@@ -50,6 +50,7 @@ st.session_state.setdefault("tpl_mobile_sort_ui", False)
 st.session_state.setdefault("tpl_work_ids", [])
 st.session_state.setdefault("auction_refund_non_winner", True)
 st.session_state.setdefault("auction_refund_option", "선택")
+st.session_state.setdefault("auction_result_visible", False)
 st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
 
@@ -5799,103 +5800,106 @@ if st.session_state.admin_ok:
 
         st.markdown("### 📊 경매 결과")
 
-        latest_closed_round_id = _api_get_latest_closed_auction_round_id_cached()
-
-        if not latest_closed_round_id:
-            st.info("경매 마감된 회차가 없습니다.")
+        if not st.session_state.get("auction_result_visible", False):
+            st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
         else:
-            latest_round_id = latest_closed_round_id
-            rr = api_get_auction_results(latest_round_id)
-            if rr.get("ok"):
-                rd = rr.get("round", {})
-                st.caption(
-                    f"최근 마감 경매: {int(rd.get('round_no', 0)):02d}회 | 입찰이름: {rd.get('bid_title', '-') }"
-                )
-                df_rr = pd.DataFrame(rr.get("rows", []))
-                if "번호" in df_rr.columns:
-                    df_rr = df_rr.drop(columns=["번호"])
+            latest_closed_round_id = _api_get_latest_closed_auction_round_id_cached()
 
-                if df_rr.empty:
-                    st.info("제출된 입찰표가 없습니다.")
-                else:
-                    st.dataframe(df_rr, use_container_width=True, hide_index=True)
-
-                    out = io.BytesIO()
-                    excel_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.xlsx"
-                    for engine_name in ("xlsxwriter", "openpyxl"):
-                        try:
-                            with pd.ExcelWriter(out, engine=engine_name) as writer:
-                                df_rr.to_excel(writer, index=False, sheet_name="경매결과")
-                            break
-                        except ModuleNotFoundError:
-                            out = io.BytesIO()
-                    else:
-                        out = io.BytesIO(df_rr.to_csv(index=False).encode("utf-8-sig"))
-                        excel_mime = "text/csv"
-                        excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.csv"
-
-                    out.seek(0)
-                b_x, b_opt, b_l = st.columns([1.4, 2.2, 1])
-                with b_x:
-                    if not df_rr.empty:
-                        st.download_button(
-                            "엑셀저장",
-                            data=out,
-                            file_name=excel_filename,
-                            mime=excel_mime,
-                            use_container_width=True,
-                            key="auction_excel_btn",
-                        )
-                with b_opt:
-                    if st.session_state.pop("_auction_reset_refund_choices", False):
-                        st.session_state.pop("auction_refund_no", None)
-                        st.session_state.pop("auction_refund_yes", None)
-                    opt_no, opt_yes = st.columns(2)
-                    with opt_no:
-                        refund_no = st.checkbox("낙찰금 미반환", key="auction_refund_no")
-                    with opt_yes:
-                        refund_yes = st.checkbox("낙찰금 반환(반환액 90%)", key="auction_refund_yes")
-
-                if refund_no and refund_yes:
-                    st.warning("두 옵션을 동시에 선택할 수 없습니다. 둘 중 하나만 선택해 주세요.")
-
-                st.session_state["_auction_prev_refund_no"] = bool(refund_no)
-                st.session_state["_auction_prev_refund_yes"] = bool(refund_yes)
-
-                with b_l:
-                    if st.button("장부 반영", use_container_width=True, key="auction_ledger_btn"):
-                        if refund_no and refund_yes:
-                            st.warning("두 옵션을 동시에 선택할 수 없습니다. 둘 중 하나만 선택해 주세요.")
-                        elif not refund_no and not refund_yes:
-                            st.warning("낙찰금 반환 여부를 선택 후 장부 반영 버튼을 눌러 주세요")
-                        else:
-                            target_round_id = _api_get_latest_closed_unreflected_auction_round_id_cached()
-                            if not target_round_id:
-                                st.warning("장부 반영 대기 중인 마감 경매가 없습니다.")
-                            else:
-                                res = api_reflect_auction_ledger(
-                                    ADMIN_PIN,
-                                    target_round_id,
-                                    refund_non_winner=bool(refund_yes),
-                                )
-                                if res.get("ok"):
-                                    st.session_state["auction_result_visible"] = False
-                                    st.session_state["_auction_reset_refund_choices"] = True
-                                    st.session_state["_auction_prev_refund_no"] = False
-                                    st.session_state["_auction_prev_refund_yes"] = False
-                                    if bool(res.get("refund_non_winner", False)):
-                                        toast(
-                                            f"경매 관리 장부 반영 완료 · 반환 {int(res.get('refunded_count', 0) or 0)}명 / {int(res.get('refunded_total', 0) or 0)}원",
-                                            icon="📒",
-                                        )
-                                    else:
-                                        toast("경매 관리 장부 반영 완료", icon="📒")
-                                    st.rerun()
-                                else:
-                                    st.error(res.get("error", "장부 반영 실패"))
+            if not latest_closed_round_id:
+                st.info("경매 마감된 회차가 없습니다.")
             else:
-                st.error(rr.get("error", "경매 결과 조회 실패"))
+                latest_round_id = latest_closed_round_id
+                rr = api_get_auction_results(latest_round_id)
+                if rr.get("ok"):
+                    rd = rr.get("round", {})
+                    st.caption(
+                        f"최근 마감 경매: {int(rd.get('round_no', 0)):02d}회 | 입찰이름: {rd.get('bid_title', '-') }"
+                    )
+                    df_rr = pd.DataFrame(rr.get("rows", []))
+                    if "번호" in df_rr.columns:
+                        df_rr = df_rr.drop(columns=["번호"])
+
+                    if df_rr.empty:
+                        st.info("제출된 입찰표가 없습니다.")
+                    else:
+                        st.dataframe(df_rr, use_container_width=True, hide_index=True)
+
+                        out = io.BytesIO()
+                        excel_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.xlsx"
+                        for engine_name in ("xlsxwriter", "openpyxl"):
+                            try:
+                                with pd.ExcelWriter(out, engine=engine_name) as writer:
+                                    df_rr.to_excel(writer, index=False, sheet_name="경매결과")
+                                break
+                            except ModuleNotFoundError:
+                                out = io.BytesIO()
+                        else:
+                            out = io.BytesIO(df_rr.to_csv(index=False).encode("utf-8-sig"))
+                            excel_mime = "text/csv"
+                            excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.csv"
+
+                        out.seek(0)
+                    b_x, b_opt, b_l = st.columns([1.4, 2.2, 1])
+                    with b_x:
+                        if not df_rr.empty:
+                            st.download_button(
+                                "엑셀저장",
+                                data=out,
+                                file_name=excel_filename,
+                                mime=excel_mime,
+                                use_container_width=True,
+                                key="auction_excel_btn",
+                            )
+                    with b_opt:
+                        if st.session_state.pop("_auction_reset_refund_choices", False):
+                            st.session_state.pop("auction_refund_no", None)
+                            st.session_state.pop("auction_refund_yes", None)
+                        opt_no, opt_yes = st.columns(2)
+                        with opt_no:
+                            refund_no = st.checkbox("낙찰금 미반환", key="auction_refund_no")
+                        with opt_yes:
+                            refund_yes = st.checkbox("낙찰금 반환(반환액 90%)", key="auction_refund_yes")
+
+                    if refund_no and refund_yes:
+                        st.warning("두 옵션을 동시에 선택할 수 없습니다. 둘 중 하나만 선택해 주세요.")
+
+                    st.session_state["_auction_prev_refund_no"] = bool(refund_no)
+                    st.session_state["_auction_prev_refund_yes"] = bool(refund_yes)
+
+                    with b_l:
+                        if st.button("장부 반영", use_container_width=True, key="auction_ledger_btn"):
+                            if refund_no and refund_yes:
+                                st.warning("두 옵션을 동시에 선택할 수 없습니다. 둘 중 하나만 선택해 주세요.")
+                            elif not refund_no and not refund_yes:
+                                st.warning("낙찰금 반환 여부를 선택 후 장부 반영 버튼을 눌러 주세요")
+                            else:
+                                target_round_id = _api_get_latest_closed_unreflected_auction_round_id_cached()
+                                if not target_round_id:
+                                    st.warning("장부 반영 대기 중인 마감 경매가 없습니다.")
+                                else:
+                                    res = api_reflect_auction_ledger(
+                                        ADMIN_PIN,
+                                        target_round_id,
+                                        refund_non_winner=bool(refund_yes),
+                                    )
+                                    if res.get("ok"):
+                                        st.session_state["auction_result_visible"] = False
+                                        st.session_state["_auction_reset_refund_choices"] = True
+                                        st.session_state["_auction_prev_refund_no"] = False
+                                        st.session_state["_auction_prev_refund_yes"] = False
+                                        if bool(res.get("refund_non_winner", False)):
+                                            toast(
+                                                f"경매 관리 장부 반영 완료 · 반환 {int(res.get('refunded_count', 0) or 0)}명 / {int(res.get('refunded_total', 0) or 0)}원",
+                                                icon="📒",
+                                            )
+                                        else:
+                                            toast("경매 관리 장부 반영 완료", icon="📒")
+                                        st.rerun()
+                                    else:
+                                        st.error(res.get("error", "장부 반영 실패"))
+                else:
+                    st.error(rr.get("error", "경매 결과 조회 실패"))
 
         st.markdown("### 📚 경매 관리 장부")
         lg = api_list_auction_ledgers(limit=100)
@@ -6226,7 +6230,9 @@ with sub4:
         my_bid = _api_get_my_bid_info_cached(str(ast.get("round_id") or ""), str(student_id or ""))
         if my_bid.get("exists"):
             bd = my_bid.get("data") or {}
-            st.info("제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}")
+            st.info(
+                f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
+            )
         else:
             bid_amount = st.number_input("입찰 가격(포인트)", min_value=0, step=1, key=f"user_bid_amt_{name}")
             yes_no = st.radio("입찰표를 제출하시겠습니까?", ["아니오", "예"], horizontal=True, key=f"user_bid_yn_{name}")
@@ -6249,6 +6255,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
