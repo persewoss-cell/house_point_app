@@ -992,11 +992,12 @@ def api_reflect_auction_ledger(admin_pin: str, round_id: str, refund_non_winner:
         )
 
     total = sum(int(x.get("amount", 0) or 0) for x in bid_rows)
+    effective_refund_non_winner = bool(refund_non_winner and len(bid_rows) > 0)
     refunded_count = 0
     refunded_total = 0
     refunded_fee_total = 0
 
-    if refund_non_winner and bid_rows:
+    if effective_refund_non_winner and bid_rows:
         sorted_rows = sorted(
             bid_rows,
             key=lambda x: (-int(x.get("amount", 0) or 0), x.get("submitted_at") or datetime.max.replace(tzinfo=timezone.utc)),
@@ -1047,7 +1048,7 @@ def api_reflect_auction_ledger(admin_pin: str, round_id: str, refund_non_winner:
             "bid_date": rd.get("opened_at"),
             "participants": len(bids),
             "total_amount": int(total),
-            "refund_non_winner": bool(refund_non_winner),
+            "refund_non_winner": bool(effective_refund_non_winner),
             "refunded_count": int(refunded_count),
             "refunded_total": int(refunded_total),
             "refunded_fee_total": int(refunded_fee_total),
@@ -6252,6 +6253,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
