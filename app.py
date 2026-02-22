@@ -2395,10 +2395,11 @@ def _get_role_name_by_student_id(student_id: str) -> str:
 @st.cache_data(ttl=30, show_spinner=False)
 def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
     """
-    ✅ return (표시문구, 투자총액_현재가치추정)
+    ✅ return (표시문구, 투자총액_현재평가)
     - 표시문구 예: "국어 100포인트" / 여러개면 "국어 100포인트, 수학 50포인트림"
     - invest_ledger: redeemed=False 항목을 보유로 간주
     - invest_products: current_price 사용 + 종목명(name/label/title/subject) 대응
+    - 현재 평가는 투자 회수(지급) 탭의 "찾을 금액" 계산식과 동일하게 반영
     """
     try:
         sid = str(student_id)
@@ -2419,7 +2420,7 @@ def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
             cur_price = float(x.get("current_price", 0.0) or 0.0)
             prod_map[pid] = (pname, cur_price)
 
-        # 2) 보유 장부(미환매) → 종목별 현재가치 합산
+        # 2) 보유 장부(미환매) → 종목별 현재평가(회수금 기준) 합산
         q = db.collection(INV_LEDGER_COL).where(filter=FieldFilter("student_id", "==", sid)).stream()
         per_prod_val = {}  # pid -> value
 
@@ -2437,18 +2438,22 @@ def _get_invest_summary_by_student_id(student_id: str) -> tuple[str, int]:
 
             pname, cur_price = prod_map.get(pid, (pid, 0.0))
 
-            # 현재가치(대략): 투자금 * (현재가/매수가)
-            if buy_price > 0 and cur_price > 0:
-                cur_val = invest_amount * (cur_price / buy_price)
+            # 현재평가: 투자 회수(지급)의 "찾을 금액"과 동일 공식
+            # diff <= -100: 전액 손실, 그 외 투자금 + (투자금 * diff / 10)
+            diff = _as_price1(cur_price - buy_price)
+            if diff <= -100:
+                cur_val = 0
             else:
-                cur_val = invest_amount
-
+                cur_val = invest_amount + (invest_amount * float(diff) / 10.0)
+                if cur_val < 0:
+                    cur_val = 0
+                    
             per_prod_val[pid] = per_prod_val.get(pid, 0) + cur_val
 
         if not per_prod_val:
             return ("없음", 0)
 
-        # 총합
+        # 총합(종목별 반올림 후 합계)
         total_val = int(round(sum(v for v in per_prod_val.values())))
 
         # 표시: 종목별(내림차순) 상위 3개만
@@ -2823,15 +2828,12 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
                 buy_price = float(r.get("buy_price", 0.0) or 0.0)
                 cur_price = float(price_by_id.get(pid, 0.0) or 0.0)
 
-                # ✅ 현재 평가(거래 탭 기준): 투자금 * (현재가/매입가)
-                if buy_price > 0 and cur_price > 0:
-                    cur_val = amt * (cur_price / buy_price)
-                else:
-                    cur_val = amt
+                # ✅ 현재 평가: 투자 회수(지급) 탭의 "찾을 금액"과 동일 계산
+                _, _, redeem_amt = _calc_redeem_amount(amt, buy_price, cur_price)
 
                 _add_sum(principal_by_name, nm, amt)
-                _add_sum(eval_by_name, nm, int(round(cur_val)))
-
+                _add_sum(eval_by_name, nm, int(redeem_amt))
+                
             principal_total = sum(principal_by_name.values())
             eval_total = sum(eval_by_name.values())
 
@@ -6255,6 +6257,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
