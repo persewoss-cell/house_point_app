@@ -5167,7 +5167,7 @@ def render_lottery_user(name: str, pin: str, student_id: str, balance: int):
                         st.error(res.get("error", "복권 구매 실패"))
 
     st.markdown("### 📜 복권 구매 내역")
-    rid = str(st_info.get("round_id", "") or "")
+    rid = str(st_info.get("round_id", "") or "") if bool(st_info.get("active", False)) else ""
     if rid:
         rows = get_my_lottery_entries_cached(rid, str(student_id or ""))
         if rows:
@@ -6265,6 +6265,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
