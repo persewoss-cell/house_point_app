@@ -5791,9 +5791,9 @@ if st.session_state.admin_ok:
         latest_closed_round_id = _api_get_latest_closed_auction_round_id_cached()
 
         if not latest_closed_round_id:
-            st.info("경매 마감 후 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
+            st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
         elif not bool(st.session_state.get("auction_result_visible", False)):
-            st.info("경매 마감 후 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
+            st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
         else:
             latest_round_id = latest_closed_round_id
             rr = api_get_auction_results(latest_round_id)
@@ -6257,6 +6257,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
