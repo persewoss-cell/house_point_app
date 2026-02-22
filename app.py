@@ -4969,7 +4969,7 @@ def render_lottery_admin():
         else:
             st.info("참여 내역이 없습니다.")
     else:
-        st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
+        st.info("복권 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
         
     st.markdown("### 🎰 복권 추첨하기")
     d1, d2, d3, d4 = st.columns(4)
@@ -6257,6 +6257,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
