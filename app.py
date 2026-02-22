@@ -6222,9 +6222,6 @@ with sub4:
         my_bid = _api_get_my_bid_info_cached(str(ast.get("round_id") or ""), str(student_id or ""))
         if my_bid.get("exists"):
             bd = my_bid.get("data") or {}
-            st.success(
-                f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
-            )
 
     st.markdown("### ✋경매 참여하기")
     if not ast.get("active"):
@@ -6232,7 +6229,7 @@ with sub4:
     else:
         my_bid = _api_get_my_bid_info_cached(str(ast.get("round_id") or ""), str(student_id or ""))
         if my_bid.get("exists"):
-            st.info("이미 입찰표를 제출했습니다.")
+            st.info("제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}")
         else:
             bid_amount = st.number_input("입찰 가격(포인트)", min_value=0, step=1, key=f"user_bid_amt_{name}")
             yes_no = st.radio("입찰표를 제출하시겠습니까?", ["아니오", "예"], horizontal=True, key=f"user_bid_yn_{name}")
@@ -6255,6 +6252,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
