@@ -49,9 +49,7 @@ st.session_state.setdefault("tpl_sort_mode", "기본")
 st.session_state.setdefault("tpl_mobile_sort_ui", False)
 st.session_state.setdefault("tpl_work_ids", [])
 st.session_state.setdefault("auction_refund_non_winner", True)
-st.session_state.setdefault("auction_result_visible", False)
-st.session_state.setdefault("auction_refund_no", False)
-st.session_state.setdefault("auction_refund_yes", False)
+st.session_state.setdefault("auction_refund_option", "선택")
 st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
 
@@ -736,6 +734,33 @@ def _api_get_latest_closed_auction_round_id_cached():
 
 
 @st.cache_data(ttl=10, show_spinner=False)
+def _api_get_latest_closed_unreflected_auction_round_id_cached():
+    try:
+        closed_docs = list(
+            db.collection("auction_rounds")
+            .where(filter=FieldFilter("status", "==", "closed"))
+            .where(filter=FieldFilter("ledger_reflected", "==", False))
+            .order_by("round_no", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .stream()
+        )
+    except FailedPrecondition:
+        recent_rounds = list(
+            db.collection("auction_rounds")
+            .order_by("round_no", direction=firestore.Query.DESCENDING)
+            .limit(30)
+            .stream()
+        )
+        closed_docs = [
+            doc
+            for doc in recent_rounds
+            if (doc.to_dict() or {}).get("status") == "closed"
+            and not bool((doc.to_dict() or {}).get("ledger_reflected", False))
+        ][:1]
+    return closed_docs[0].id if closed_docs else ""
+
+
+@st.cache_data(ttl=10, show_spinner=False)
 def _api_get_my_bid_info_cached(round_id: str, student_id: str):
     if not round_id or not student_id:
         return {"exists": False}
@@ -747,6 +772,7 @@ def _api_get_my_bid_info_cached(round_id: str, student_id: str):
 
 def clear_auction_view_cache():
     _api_get_latest_closed_auction_round_id_cached.clear()
+    _api_get_latest_closed_unreflected_auction_round_id_cached.clear()
     _api_get_my_bid_info_cached.clear()
 
 
@@ -5759,8 +5785,7 @@ if st.session_state.admin_ok:
                 res = api_start_auction(ADMIN_PIN, bid_title_admin)
                 if res.get("ok"):
                     st.session_state["auction_result_visible"] = False
-                    st.session_state["auction_refund_no"] = False
-                    st.session_state["auction_refund_yes"] = False
+                    st.session_state["auction_refund_option"] = "선택"
                     toast(f"경매 {int(res.get('round_no', 0)):02d}회차 개시", icon="🏁")
                     st.rerun()
                 else:
@@ -5783,17 +5808,12 @@ if st.session_state.admin_ok:
         else:
             st.info("개시된 경매가 없습니다.")
 
-        if st.button("경매 결과 보기", use_container_width=True, key="auction_show_result_btn"):
-            st.session_state["auction_result_visible"] = True
-
         st.markdown("### 📊 경매 결과")
 
         latest_closed_round_id = _api_get_latest_closed_auction_round_id_cached()
 
         if not latest_closed_round_id:
-            st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
-        elif not bool(st.session_state.get("auction_result_visible", False)):
-            st.info("경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.")
+            st.info("경매 마감된 회차가 없습니다.")
         else:
             latest_round_id = latest_closed_round_id
             rr = api_get_auction_results(latest_round_id)
@@ -5853,38 +5873,34 @@ if st.session_state.admin_ok:
                             key="auction_excel_btn",
                         )
                 with b_opt1:
-                    refund_no = st.checkbox("낙찰금 미반환", key="auction_refund_no")
+                    st.write("")
                 with b_opt2:
-                    refund_yes = st.checkbox("낙찰금 반환(반환액 90%)", key="auction_refund_yes")
+                    refund_option = st.radio(
+                        "낙찰금 반환 여부",
+                        options=["선택", "낙찰금 미반환", "낙찰금 반환(반환액 90%)"],
+                        index=0,
+                        key="auction_refund_option",
+                        horizontal=True,
+                        label_visibility="collapsed",
+                    )
 
-                if refund_no and refund_yes:
-                    changed = st.session_state.get("auction_refund_last", "")
-                    if changed == "yes":
-                        st.session_state["auction_refund_no"] = False
-                        refund_no = False
-                    else:
-                        st.session_state["auction_refund_yes"] = False
-                        refund_yes = False
-
-                if refund_no:
-                    st.session_state["auction_refund_last"] = "no"
-                elif refund_yes:
-                    st.session_state["auction_refund_last"] = "yes"
+                refund_no = refund_option == "낙찰금 미반환"
+                refund_yes = refund_option == "낙찰금 반환(반환액 90%)"
 
                 with b_l:
                     if st.button("장부 반영", use_container_width=True, key="auction_ledger_btn"):
                         if not refund_no and not refund_yes:
                             st.warning("낙찰금 반환 여부를 선택 후 장부 반영 버튼을 눌러 주세요")
                         else:
+                            target_round_id = _api_get_latest_closed_unreflected_auction_round_id_cached() or latest_round_id
                             res = api_reflect_auction_ledger(
                                 ADMIN_PIN,
-                                latest_round_id,
+                                target_round_id,
                                 refund_non_winner=bool(refund_yes),
                             )
                             if res.get("ok"):
                                 st.session_state["auction_result_visible"] = False
-                                st.session_state["auction_refund_no"] = False
-                                st.session_state["auction_refund_yes"] = False
+                                st.session_state["auction_refund_option"] = "선택"
                                 if bool(res.get("refund_non_winner", False)):
                                     toast(
                                         f"경매 관리 장부 반영 완료 · 반환 {int(res.get('refunded_count', 0) or 0)}명 / {int(res.get('refunded_total', 0) or 0)}원",
@@ -6256,12 +6272,3 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
-
-
-
-
-
-
-
-
-
