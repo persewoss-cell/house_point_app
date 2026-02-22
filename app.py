@@ -5826,20 +5826,6 @@ if st.session_state.admin_ok:
                 if "번호" in df_rr.columns:
                     df_rr = df_rr.drop(columns=["번호"])
 
-                participants = len(df_rr)
-                total_amount = int(df_rr["입찰 가격"].sum()) if (not df_rr.empty and "입찰 가격" in df_rr.columns) else 0
-                summary_df = pd.DataFrame(
-                    [{
-                        "참여자수": int(participants),
-                        "참여 복권 수": "-",
-                        "총 액수": int(total_amount) if total_amount > 0 else "-",
-                        "당첨금 지급 총액": "-",
-                        "세금": "-",
-                        "사회기부금": "-",
-                    }]
-                )
-                st.dataframe(summary_df, use_container_width=True, hide_index=True)
-                
                 if df_rr.empty:
                     st.info("제출된 입찰표가 없습니다.")
                 else:
@@ -6284,4 +6270,5 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
