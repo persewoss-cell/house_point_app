@@ -5861,7 +5861,7 @@ if st.session_state.admin_ok:
                         excel_filename = f"auction_result_{int(rd.get('round_no', 0)):02d}.csv"
 
                     out.seek(0)
-                b_x, b_opt1, b_opt2, b_l = st.columns([1.4, 1, 1.2, 1])
+                b_x, b_opt, b_l = st.columns([1.4, 2.2, 1])
                 with b_x:
                     if not df_rr.empty:
                         st.download_button(
@@ -5872,20 +5872,29 @@ if st.session_state.admin_ok:
                             use_container_width=True,
                             key="auction_excel_btn",
                         )
-                with b_opt1:
-                    st.write("")
-                with b_opt2:
-                    refund_option = st.radio(
-                        "낙찰금 반환 여부",
-                        options=["선택", "낙찰금 미반환", "낙찰금 반환(반환액 90%)"],
-                        index=0,
-                        key="auction_refund_option",
-                        horizontal=True,
-                        label_visibility="collapsed",
-                    )
+                prev_refund_no = bool(st.session_state.get("_auction_prev_refund_no", False))
+                prev_refund_yes = bool(st.session_state.get("_auction_prev_refund_yes", False))
 
-                refund_no = refund_option == "낙찰금 미반환"
-                refund_yes = refund_option == "낙찰금 반환(반환액 90%)"
+                with b_opt:
+                    opt_no, opt_yes = st.columns(2)
+                    with opt_no:
+                        refund_no = st.checkbox("낙찰금 미반환", key="auction_refund_no")
+                    with opt_yes:
+                        refund_yes = st.checkbox("낙찰금 반환(반환액 90%)", key="auction_refund_yes")
+
+                if refund_no and refund_yes:
+                    if refund_no != prev_refund_no:
+                        refund_yes = False
+                        st.session_state["auction_refund_yes"] = False
+                    elif refund_yes != prev_refund_yes:
+                        refund_no = False
+                        st.session_state["auction_refund_no"] = False
+                    else:
+                        refund_yes = False
+                        st.session_state["auction_refund_yes"] = False
+
+                st.session_state["_auction_prev_refund_no"] = bool(refund_no)
+                st.session_state["_auction_prev_refund_yes"] = bool(refund_yes)
 
                 with b_l:
                     if st.button("장부 반영", use_container_width=True, key="auction_ledger_btn"):
@@ -5900,7 +5909,10 @@ if st.session_state.admin_ok:
                             )
                             if res.get("ok"):
                                 st.session_state["auction_result_visible"] = False
-                                st.session_state["auction_refund_option"] = "선택"
+                                st.session_state["auction_refund_no"] = False
+                                st.session_state["auction_refund_yes"] = False
+                                st.session_state["_auction_prev_refund_no"] = False
+                                st.session_state["_auction_prev_refund_yes"] = False
                                 if bool(res.get("refund_non_winner", False)):
                                     toast(
                                         f"경매 관리 장부 반영 완료 · 반환 {int(res.get('refunded_count', 0) or 0)}명 / {int(res.get('refunded_total', 0) or 0)}원",
@@ -6272,3 +6284,4 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
