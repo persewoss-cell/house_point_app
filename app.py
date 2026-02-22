@@ -2334,6 +2334,14 @@ def api_admin_save_template_orders(admin_pin: str, ordered_template_ids: list[st
 INV_PROD_COL = "invest_products"
 INV_LEDGER_COL = "invest_ledger"
 
+
+def _as_price1(v):
+    """주가를 소수점 첫째 자리로 정규화."""
+    try:
+        return float(f"{float(v):.1f}")
+    except Exception:
+        return 0.0
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _get_role_name_by_student_id(student_id: str) -> str:
     try:
@@ -6257,6 +6265,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
