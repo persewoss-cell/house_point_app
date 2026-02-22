@@ -6231,7 +6231,7 @@ with sub4:
         if my_bid.get("exists"):
             bd = my_bid.get("data") or {}
             st.info(
-                f"이미 제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
+                f"제출 완료: {int(bd.get('amount', 0) or 0)} 포인트 / 제출시각 {format_kr_datetime_seconds(bd.get('submitted_at'))}"
             )
         else:
             bid_amount = st.number_input("입찰 가격(포인트)", min_value=0, step=1, key=f"user_bid_amt_{name}")
@@ -6255,6 +6255,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
