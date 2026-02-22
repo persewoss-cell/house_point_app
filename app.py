@@ -5848,6 +5848,9 @@ if st.session_state.admin_ok:
                             key="auction_excel_btn",
                         )
                 with b_opt:
+                    if st.session_state.pop("_auction_reset_refund_choices", False):
+                        st.session_state.pop("auction_refund_no", None)
+                        st.session_state.pop("auction_refund_yes", None)
                     opt_no, opt_yes = st.columns(2)
                     with opt_no:
                         refund_no = st.checkbox("낙찰금 미반환", key="auction_refund_no")
@@ -5878,8 +5881,7 @@ if st.session_state.admin_ok:
                                 )
                                 if res.get("ok"):
                                     st.session_state["auction_result_visible"] = False
-                                    st.session_state["auction_refund_no"] = False
-                                    st.session_state["auction_refund_yes"] = False
+                                    st.session_state["_auction_reset_refund_choices"] = True
                                     st.session_state["_auction_prev_refund_no"] = False
                                     st.session_state["_auction_prev_refund_yes"] = False
                                     if bool(res.get("refund_non_winner", False)):
@@ -6253,6 +6255,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
