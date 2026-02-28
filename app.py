@@ -2180,7 +2180,7 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
     amount = int(amount or 0)
-    memo = (memo or "").strip() or "일괄 지급"
+    memo = (memo or "").strip() or "일괄 입금"
     if amount <= 0:
         return {"ok": False, "error": "금액은 1 이상이어야 합니다."}
 
@@ -2220,7 +2220,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
     if not is_admin_pin(admin_pin):
         return {"ok": False, "error": "관리자 PIN이 틀립니다."}
     amount = int(amount or 0)
-    memo = (memo or "").strip() or "일괄 벌금"
+    memo = (memo or "").strip() or "일괄 출금"
     if amount <= 0:
         return {"ok": False, "error": "금액은 1 이상이어야 합니다."}
 
@@ -5221,9 +5221,9 @@ if st.session_state.admin_ok:
         with setting_tabs[0]:
 
             # -------------------------------------------------
-            # 1) ✅ 전체 일괄 지급/벌금 (단일 UI로 통일)
+            # 1) ✅ 전체 일괄 입금/출금 (단일 UI로 통일)
             # -------------------------------------------------
-            st.markdown("### 🎁 전체 일괄 지급/벌금")
+            st.markdown("### 🎁 전체 일괄 입금/출금")
 
             tpl_res3 = api_list_templates_cached()
             templates3 = tpl_res3.get("templates", []) if tpl_res3.get("ok") else []
@@ -5250,19 +5250,19 @@ if st.session_state.admin_ok:
                         if dep_bulk > 0:
                             res = api_admin_bulk_deposit(admin_pin, dep_bulk, memo_bulk)
                             if res.get("ok"):
-                                toast(f"일괄 지급 완료! ({res.get('count')}명)", icon="🎉")
+                                toast(f"일괄 입금 완료! ({res.get('count')}명)", icon="🎉")
                                 api_list_accounts_cached.clear()
                                 st.rerun()
                             else:
-                                st.error(res.get("error", "일괄 지급 실패"))
+                                st.error(res.get("error", "일괄 입금 실패"))
                         else:
                             res = api_admin_bulk_withdraw(admin_pin, wd_bulk, memo_bulk)
                             if res.get("ok"):
-                                toast(f"벌금 완료! (적용 {res.get('count')}명)", icon="⚠️")
+                                toast(f"출금 완료! (적용 {res.get('count')}명)", icon="⚠️")
                                 api_list_accounts_cached.clear()
                                 st.rerun()
                             else:
-                                st.error(res.get("error", "일괄 벌금 실패"))
+                                st.error(res.get("error", "일괄 출금 실패"))
 
             with b2:
                 if st.button("되돌리기(관리자)", key="bulk_undo_toggle_setting", use_container_width=True):
@@ -5680,7 +5680,7 @@ if st.session_state.admin_ok:
                         st.error(res.get("error", "PIN 변경 실패"))
 
         with setting_tabs[1]:
-            st.markdown("### 🧾 개인 지급/벌금")
+            st.markdown("### 🧾 개인 입금/출금")
             
             st.markdown("#### 👥 대상학생 선택")
             selected_ids = []
@@ -5693,7 +5693,7 @@ if st.session_state.admin_ok:
                         if st.checkbox(nm, key=f"admin_sel_student_{sid}"):
                             selected_ids.append(sid)
 
-            st.markdown("#### 🎁 개인 지급/벌금")
+            st.markdown("#### 🎁 개인 입금/출금")
             memo_sel, dep_sel, wd_sel = render_admin_trade_ui(
                 prefix="admin_selected_onebox",
                 templates_list=TEMPLATES,
@@ -5701,7 +5701,7 @@ if st.session_state.admin_ok:
                 show_quick_amount=False,
             )
 
-            if st.button("개인 지급/벌금 저장", key="admin_selected_save", use_container_width=True):
+            if st.button("개인 입금/출금 저장", key="admin_selected_save", use_container_width=True):
                 if not memo_sel:
                     st.error("내역(메모)을 입력해 주세요.")
                 elif (dep_sel > 0 and wd_sel > 0) or (dep_sel == 0 and wd_sel == 0):
@@ -6276,6 +6276,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
