@@ -5206,14 +5206,14 @@ if st.session_state.admin_ok:
 
     filtered = accounts
 
-    tab_labels = ["⚙️ 설정", "👥 개별 조회", "💼 직업/월급", "📈 투자", "🏷️ 경매", "🍀 복권", "📒 전체통장"]
+    tab_labels = ["💰입금/출금", "👥 개별 조회", "💼 직업/월급", "📈 투자", "🏷️ 경매", "🍀 복권", "📒 전체통장"]
     tabs = st.tabs(tab_labels)
 
     admin_pin = ADMIN_PIN
 
 
     # -------------------------
-    # ⚙️ 설정 탭
+    # 💰입금/출금 탭
     # -------------------------
     with tabs[0]:
         setting_tabs = st.tabs(["전체", "개인"])
@@ -6041,13 +6041,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
+sub1, sub2, sub_invest, sub3, sub4, sub5 = st.tabs(["📝 거래/통장", "💰 적금", "📈 투자", "🎯 목표", "🏷️ 경매", "🍀 복권"])
 
 # =========================
 # 거래 탭
 # =========================
 with sub1:
-    st.subheader("📝 거래 기록(통장에 찍기)")
+    st.subheader("📝 통장 입금/출금(통장에 기록)")
 
     # ✅ 사용자도 관리자 설정탭 입력 UI를 그대로 사용 (완전 동일 동작)
     memo_u, dep_u, wd_u = render_admin_trade_ui(
@@ -6276,6 +6276,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
