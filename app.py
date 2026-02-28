@@ -2794,7 +2794,8 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     # -------------------------------------------------
     # 1) (상단) 종목 및 주가 변동
     # -------------------------------------------------
-    st.markdown("### 📈 종목 및 주가 변동")
+    # 다른 탭과 시작 간격을 맞추기 위해 subheader를 사용(불필요한 상단 여백 제거)
+    st.subheader("📈 종목 및 주가 변동")
     
     # (사용자) 상단 요약: 통장 잔액 / 투자 원금 / 현재 평가
     if not is_admin:
@@ -6287,5 +6288,6 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
