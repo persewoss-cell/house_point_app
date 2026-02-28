@@ -123,6 +123,24 @@ st.markdown(
     }
     .tpl-sub { color:#666; font-size: 0.85rem; margin-top: 2px; line-height: 1.05; }
 
+    /* 투자 탭: 종목별 주가 변동 내역 표 */
+    table.inv_hist_table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        line-height: 1.15;
+    }
+    table.inv_hist_table th, table.inv_hist_table td {
+        padding: 6px 8px;
+        border: 1px solid rgba(0,0,0,0.08);
+        vertical-align: middle;
+    }
+    table.inv_hist_table th {
+        font-weight: 700;
+        background: rgba(0,0,0,0.03);
+        text-align: center;
+    }
+
     /* ✅ 버튼(특히 화살표) 작게 + 가운데 */
     div[data-testid="stButton"] > button {
         padding: 0.05rem 0.28rem !important;
@@ -2571,32 +2589,7 @@ def _render_invest_admin_like(*, inv_admin_ok_flag: bool, force_is_admin: bool, 
     INV_LEDGER_COL = "invest_ledger"
     
     
-    # ✅ (PATCH) 투자 탭 - 종목별 '주가 변동 내역' 표 글자/패딩 축소 전용 CSS
-    st.markdown(
-        """
-        <style>
-        table.inv_hist_table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-            line-height: 1.15;
-        }
-        table.inv_hist_table th, table.inv_hist_table td {
-            padding: 6px 8px;
-            border: 1px solid rgba(0,0,0,0.08);
-            vertical-align: middle;
-        }
-        table.inv_hist_table th {
-            font-weight: 700;
-            background: rgba(0,0,0,0.03);
-            text-align: center;  /* ✅ 제목셀만 중앙정렬 */
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-# -------------------------
+    # -------------------------
     # 유틸(함수 대신 안전하게 inline)
     # -------------------------
     days_ko = ["월", "화", "수", "목", "금", "토", "일"]
@@ -6288,6 +6281,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
