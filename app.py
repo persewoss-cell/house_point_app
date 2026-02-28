@@ -466,6 +466,7 @@ def _api_get_txs_by_student_id_cached(student_id: str, limit: int):
                 "created_at_utc": created_dt_utc,
                 "created_at_kr": format_kr_datetime(created_dt_utc.astimezone(KST)) if created_dt_utc else "",
                 "memo": tx.get("memo", ""),
+                "recorder": str(tx.get("recorded_by_name", "") or ""),
                 "type": tx.get("type", ""),
                 "amount": amt,
                 "deposit": amt if amt > 0 else 0,
@@ -585,6 +586,7 @@ def api_add_tx(name, pin, memo, deposit, withdraw):
                 "amount": amount,
                 "balance_after": new_bal,
                 "memo": memo,
+                "recorded_by_name": str((student_doc.to_dict() or {}).get("name", name) or name),
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -642,6 +644,7 @@ def api_admin_add_tx_by_student_id(admin_pin: str, student_id: str, memo: str, d
                 "amount": amount,
                 "balance_after": new_bal,
                 "memo": memo,
+                "recorded_by_name": ADMIN_NAME,
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -4324,7 +4327,15 @@ def render_tx_table(df_tx: pd.DataFrame):
             "deposit": "입금",
             "withdraw": "출금",
             "balance_after": "총액",
+            "recorder": "기록자",
         }
+    )
+    if "기록자" not in view.columns:
+        view["기록자"] = ""
+    st.dataframe(
+        view[["내역", "입금", "출금", "총액", "날짜-시간", "기록자"]],
+        use_container_width=True,
+        hide_index=True,
     )
     st.dataframe(
         view[["내역", "입금", "출금", "총액", "날짜-시간"]],
@@ -6265,3 +6276,4 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
