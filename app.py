@@ -4342,11 +4342,6 @@ def render_tx_table(df_tx: pd.DataFrame):
         use_container_width=True,
         hide_index=True,
     )
-    st.dataframe(
-        view[["내역", "입금", "출금", "총액", "날짜-시간"]],
-        use_container_width=True,
-        hide_index=True,
-    )
 
 
 def render_active_savings_list(savings: list[dict], name: str, pin: str, balance_now: int):
@@ -6281,6 +6276,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
