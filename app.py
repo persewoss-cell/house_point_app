@@ -5693,7 +5693,7 @@ if st.session_state.admin_ok:
                         if st.checkbox(nm, key=f"admin_sel_student_{sid}"):
                             selected_ids.append(sid)
 
-            st.markdown("#### 🎁 개인 입금/출금")
+            st.markdown("#### 🎁 입금/출금하기")
             memo_sel, dep_sel, wd_sel = render_admin_trade_ui(
                 prefix="admin_selected_onebox",
                 templates_list=TEMPLATES,
@@ -6276,6 +6276,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
