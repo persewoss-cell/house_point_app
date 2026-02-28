@@ -881,6 +881,7 @@ def api_submit_bid(name: str, pin: str, amount: int):
                 "amount": -int(bid_amount),
                 "balance_after": int(new_bal),
                 "memo": memo,
+                "recorded_by_name": str((student_doc.to_dict() or {}).get("name", name) or name),
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -1035,6 +1036,7 @@ def api_reflect_auction_ledger(admin_pin: str, round_id: str, refund_non_winner:
                     "amount": int(refund_amount),
                     "balance_after": int(new_bal),
                     "memo": f"{refund_memo} (수수료 10% 차감)",
+                    "recorded_by_name": ADMIN_NAME,
                     "created_at": firestore.SERVER_TIMESTAMP,
                 }
             )
@@ -1329,6 +1331,7 @@ def api_buy_lottery(name: str, pin: str, numbers: list[int]):
                 "amount": -int(price),
                 "balance_after": int(new_bal),
                 "memo": f"복권 {int(round_no)}회 구매",
+                "recorded_by_name": str(s.get("name", "") or name),
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -1634,6 +1637,7 @@ def api_pay_lottery_prizes(admin_pin: str, round_id: str):
                 "amount": int(prize),
                 "balance_after": int(new_bal),
                 "memo": f"복권 당첨금 지급 {int(x.get('round_no', 0) or 0)}회차",
+                "recorded_by_name": ADMIN_NAME,
                 "created_at": firestore.SERVER_TIMESTAMP,
             })
         _do(db.transaction())
@@ -1919,6 +1923,7 @@ def api_savings_create(name, pin, principal, weeks):
                 "amount": -principal,
                 "balance_after": new_bal,
                 "memo": f"적금 가입({weeks}주)",
+                "recorded_by_name": str((student_doc.to_dict() or {}).get("name", name) or name),
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -1946,7 +1951,7 @@ def api_savings_create(name, pin, principal, weeks):
         return {"ok": False, "error": f"적금 가입 실패: {e}"}
 
 
-def api_savings_cancel(name, pin, savings_id):
+def api_savings_cancel(name, pin, savings_id, actor_name=None):
     student_doc = fs_auth_student(name, pin)
     if not student_doc:
         return {"ok": False, "error": "이름 또는 비밀번호가 틀립니다."}
@@ -1954,6 +1959,8 @@ def api_savings_cancel(name, pin, savings_id):
     savings_id = str(savings_id or "").strip()
     if not savings_id:
         return {"ok": False, "error": "savings_id가 필요합니다."}
+
+    recorded_by = str(actor_name or (student_doc.to_dict() or {}).get("name", name) or name)
 
     student_ref = db.collection("students").document(student_doc.id)
     savings_ref = db.collection("savings").document(savings_id)
@@ -1988,6 +1995,7 @@ def api_savings_cancel(name, pin, savings_id):
                 "amount": principal,
                 "balance_after": new_bal,
                 "memo": f"적금 해지({weeks}주)",
+                "recorded_by_name": recorded_by,
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -2054,6 +2062,7 @@ def api_process_maturities(name, pin):
                     "amount": amount,
                     "balance_after": new_bal,
                     "memo": f"적금 만기({weeks}주)",
+                    "recorded_by_name": ADMIN_NAME,
                     "created_at": firestore.SERVER_TIMESTAMP,
                 },
             )
@@ -2178,6 +2187,7 @@ def api_admin_bulk_deposit(admin_pin, amount, memo):
                     "amount": amount,
                     "balance_after": new_bal,
                     "memo": memo,
+                    "recorded_by_name": ADMIN_NAME,
                     "created_at": firestore.SERVER_TIMESTAMP,
                 },
             )
@@ -2217,6 +2227,7 @@ def api_admin_bulk_withdraw(admin_pin, amount, memo):
                     "amount": -amount,
                     "balance_after": new_bal,
                     "memo": memo,
+                    "recorded_by_name": ADMIN_NAME,
                     "created_at": firestore.SERVER_TIMESTAMP,
                 },
             )
@@ -6276,4 +6287,5 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
