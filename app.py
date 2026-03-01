@@ -4401,12 +4401,6 @@ def render_active_savings_list(savings: list[dict], name: str, pin: str, balance
     else:
         st.caption("적금 내역이 없어요.")
 
-    st.markdown("### 🟢 진행 중 적금")
-    if active:
-        st.caption(f"진행 중 적금 {len(active)}건")
-    else:
-        st.caption("진행 중인 적금이 없어요.")
-
     if allow_cancel:
         st.markdown("### ⚠️ 중도 해지(원금만 지급)")
         st.caption("중도 해지할 적금 선택")
@@ -6315,6 +6309,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
