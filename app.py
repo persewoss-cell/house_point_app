@@ -321,6 +321,21 @@ def format_kr_datetime(val) -> str:
     return f"{dt.year}년 {dt.month:02d}월 {dt.day:02d}일{dow_txt} {ampm} {hour12:02d}시 {dt.minute:02d}분"
 
 
+def format_kr_date_with_dow(val) -> str:
+    if val is None or val == "":
+        return ""
+    dt_utc = _to_utc_datetime(val)
+    if dt_utc is None:
+        return str(val)
+    dt = dt_utc.astimezone(KST)
+    dow_map = ["월", "화", "수", "목", "금", "토", "일"]
+    try:
+        dow = dow_map[dt.weekday()]
+    except Exception:
+        dow = ""
+    return f"{dt.month}월 {dt.day}일({dow})" if dow else f"{dt.month}월 {dt.day}일"
+
+    
 def format_kr_datetime_seconds(val) -> str:
     if val is None or val == "":
         return ""
@@ -522,6 +537,7 @@ def _api_savings_list_by_student_id_cached(student_id: str):
                 "principal": int(s.get("principal", 0) or 0),
                 "weeks": int(s.get("weeks", 0) or 0),
                 "interest": int(s.get("interest", 0) or 0),
+                "start_date": _to_utc_datetime(s.get("start_date")),
                 "maturity_date": _to_utc_datetime(s.get("maturity_date")),
                 "status": s.get("status", "active"),
             }
@@ -4344,58 +4360,81 @@ def render_tx_table(df_tx: pd.DataFrame):
     )
 
 
-def render_active_savings_list(savings: list[dict], name: str, pin: str, balance_now: int):
+def render_active_savings_list(savings: list[dict], name: str, pin: str, balance_now: int, allow_cancel: bool = True):
     active = [s for s in savings if str(s.get("status", "")).lower() == "active"]
-    matured = [s for s in savings if str(s.get("status", "")).lower() == "matured"]
-    canceled = [s for s in savings if str(s.get("status", "")).lower() == "canceled"]
+
+    st.markdown("### 📒 내 적금 내역")
+
+    rows = []
+    status_map = {"active": "진행중", "canceled": "중도해지", "matured": "만기"}
+    for s in savings:
+        principal = int(s.get("principal", 0) or 0)
+        weeks = int(s.get("weeks", 0) or 0)
+        interest2 = int(s.get("interest", 0) or 0)
+        maturity_amt = principal + interest2
+        status_raw = str(s.get("status", "active") or "active").lower()
+        status_txt = status_map.get(status_raw, status_raw)
+        if status_raw == "active":
+            payout = "-"
+        elif status_raw == "canceled":
+            payout = f"{principal}"
+        elif status_raw == "matured":
+            payout = f"{maturity_amt}"
+        else:
+            payout = "-"
+        rows.append(
+            {
+                "적금기간": f"{weeks}주",
+                "이자율": f"{rate_by_weeks(weeks) * 100:.1f}%",
+                "적금 금액": principal,
+                "이자": interest2,
+                "만기금액": maturity_amt,
+                "적금날짜": format_kr_date_with_dow(s.get("start_date")),
+                "만기날짜": format_kr_date_with_dow(s.get("maturity_date")),
+                "처리결과": status_txt,
+                "지급금액": payout,
+            }
+        )
+
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.caption("적금 내역이 없어요.")
 
     st.markdown("### 🟢 진행 중 적금")
-    if not active:
-        st.caption("진행 중인 적금이 없어요.")
+    if active:
+        st.caption(f"진행 중 적금 {len(active)}건")
     else:
-        for s in active:
-            sid = s["savings_id"]
-            principal = int(s["principal"])
-            weeks = int(s["weeks"])
-            interest2 = int(s["interest"])
-            mdt = s.get("maturity_date")
-            mkr = format_kr_datetime(mdt.astimezone(KST)) if isinstance(mdt, datetime) else ""
-            total_amt = principal + interest2
-            st.write(
-                f"- 원금 **{principal}**, 기간 **{weeks}주**, 만기일 **{mkr}**, 만기 이자 **{interest2}**, 만기시 총 금액 **{total_amt}**"
+        st.caption("진행 중인 적금이 없어요.")
+
+    if allow_cancel:
+        st.markdown("### ⚠️ 중도 해지(원금만 지급)")
+        st.caption("중도 해지할 적금 선택")
+        active_options = [
+            (
+                s["savings_id"],
+                f"{int(s.get('weeks', 0) or 0)}주 | 원금 {int(s.get('principal', 0) or 0)} | 만기 {format_kr_date_with_dow(s.get('maturity_date'))}",
             )
+            for s in active
+        ]
 
-            if st.button("해지", key=f"sv_cancel_btn_{name}_{sid}", use_container_width=True):
-                st.session_state[f"sv_cancel_confirm_{sid}"] = True
+        selected_sid = st.selectbox(
+            "",
+            options=[""] + [sid for sid, _ in active_options],
+            format_func=lambda sid: "(선택 없음)" if sid == "" else dict(active_options).get(sid, sid),
+            key=f"sv_cancel_select_{name}",
+            label_visibility="collapsed",
+        )
 
-            if st.session_state.get(f"sv_cancel_confirm_{sid}", False):
-                st.warning("정말로 해지하시겠습니까? (원금만 반환)")
-                y, n = st.columns(2)
-                with y:
-                    if st.button("예", key=f"sv_cancel_yes_{name}_{sid}", use_container_width=True):
-                        res = api_savings_cancel(name, pin, sid)
-                        if res.get("ok"):
-                            toast(f"해지 완료! (+{res.get('refunded', 0)})", icon="🧾")
-                            st.session_state[f"sv_cancel_confirm_{sid}"] = False
-                            refresh_account_data(name, pin, force=True)
-                            st.rerun()
-                        else:
-                            st.error(res.get("error", "해지 실패"))
-                with n:
-                    if st.button("아니오", key=f"sv_cancel_no_{name}_{sid}", use_container_width=True):
-                        st.session_state[f"sv_cancel_confirm_{sid}"] = False
-                        st.rerun()
-
-    if matured:
-        st.markdown("### 🔵 만기(자동 반환 완료)")
-        for s in matured[:10]:
-            st.write(f"- 원금 {int(s['principal'])}, {int(s['weeks'])}주, 이자 {int(s['interest'])}")
-
-    if canceled:
-        st.markdown("### ⚪ 해지 기록")
-        for s in canceled[:10]:
-            st.write(f"- 원금 {int(s['principal'])}, {int(s['weeks'])}주")
-
+        if st.button("해지 버튼", key=f"sv_cancel_action_{name}", use_container_width=True, disabled=(selected_sid == "")):
+            res = api_savings_cancel(name, pin, selected_sid)
+            if res.get("ok"):
+                toast(f"해지 완료! (+{res.get('refunded', 0)})", icon="🧾")
+                refresh_account_data(name, pin, force=True)
+                st.rerun()
+            else:
+                st.error(res.get("error", "해지 실패"))
+                
 
 def render_goal_section(name: str, pin: str, balance: int, savings_list: list[dict]):
     # ✅ (PATCH) 목표 날짜 기준 D-day 표시
@@ -5762,7 +5801,7 @@ if st.session_state.admin_ok:
                     df_tx = df_tx.sort_values("created_at_utc", ascending=False)
                     render_tx_table(df_tx)
 
-                render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=bal_now)
+                render_active_savings_list(savings, name=f"admin_view_{nm}", pin="0000", balance_now=bal_now, allow_cancel=False)
                 render_goal_readonly_admin(student_id=sid, balance_now=bal_now, savings=savings)
 
     # -------------------------
@@ -6276,6 +6315,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
