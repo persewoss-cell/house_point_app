@@ -4643,6 +4643,25 @@ with st.sidebar:
                 st.session_state.delete_confirm = False
                 st.rerun()
 
+    # 관리자 전용: 사이드바 PIN 재설정
+    if st.session_state.get("logged_in", False) and st.session_state.get("admin_ok", False):
+        st.markdown("<hr style='border:0; border-top:1px solid #BDBDBD; margin:18px 0;'>", unsafe_allow_html=True)
+        st.markdown("### 🔧 PIN 재설정")
+        target = st.text_input("대상 학생 이름", key="reset_target_setting").strip()
+        newp = st.text_input("새 PIN(4자리)", key="reset_pin_setting", type="password").strip()
+
+        if st.button("PIN 변경", key="reset_run_setting", use_container_width=True):
+            if not target:
+                st.error("대상 이름을 입력해 주세요.")
+            elif not pin_ok(newp):
+                st.error("새 PIN은 4자리 숫자여야 해요.")
+            else:
+                res = api_admin_reset_pin(ADMIN_PIN, target, newp)
+                if res.get("ok"):
+                    toast("PIN 변경 완료!", icon="🔧")
+                else:
+                    st.error(res.get("error", "PIN 변경 실패"))
+
 
 # =========================
 # Main: 로그인
@@ -5693,25 +5712,6 @@ if st.session_state.admin_ok:
                             st.rerun()
 
 
-            # -------------------------------------------------
-            # 4) PIN 재설정 (맨 아래)
-            # -------------------------------------------------
-            st.markdown("### 🔧 PIN 재설정")
-            target = st.text_input("대상 학생 이름", key="reset_target_setting").strip()
-            newp = st.text_input("새 PIN(4자리)", key="reset_pin_setting", type="password").strip()
-
-            if st.button("PIN 변경", key="reset_run_setting", use_container_width=True):
-                if not target:
-                    st.error("대상 이름을 입력해 주세요.")
-                elif not pin_ok(newp):
-                    st.error("새 PIN은 4자리 숫자여야 해요.")
-                else:
-                    res = api_admin_reset_pin(admin_pin, target, newp)
-                    if res.get("ok"):
-                        toast("PIN 변경 완료!", icon="🔧")
-                    else:
-                        st.error(res.get("error", "PIN 변경 실패"))
-
         with setting_tabs[1]:
             st.markdown("### 🧾 개인 입금/출금")
             
@@ -6309,6 +6309,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
