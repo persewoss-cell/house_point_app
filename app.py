@@ -440,7 +440,6 @@ def _persist_login_form_state(name_input: str, pin_input: str):
     )
 
     st.session_state.remember_login_pref = bool(effective_keep_login)
-    st.session_state.remember_login_check = bool(effective_keep_login)
 
     effective_saved_name = name_input if name_input else str(existing_saved_name or "")
     effective_saved_pin = pin_input if pin_input else str(existing_saved_pin or "")
@@ -6762,6 +6761,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
