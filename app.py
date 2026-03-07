@@ -216,11 +216,25 @@ def _restore_remember_flags_from_query_params():
 
 
 def _persist_remember_flags_to_query_params():
-    """로그인 상태와 무관하게 기억하기 체크 상태를 URL에 반영한다."""
+    """로그인 상태와 무관하게 기억하기 체크 상태를 URL/로컬스토리지에 반영한다."""
     keep_name = bool(st.session_state.get("remember_name_check", False))
     keep_pin = bool(st.session_state.get("remember_pin_check", False))
     st.query_params["remember_name"] = "1" if keep_name else "0"
     st.query_params["remember_pin"] = "1" if keep_pin else "0"
+    
+    # ✅ 로그아웃 직후 로그인 폼 주입 스크립트가 localStorage 기준으로 체크박스를
+    # 다시 토글해버리지 않도록 remember 상태를 함께 동기화한다.
+    components.html(
+        f"""
+        <script>
+        try {{
+            localStorage.setItem("ce_remember_name", {("'1'" if keep_name else "'0'")});
+            localStorage.setItem("ce_remember_pin", {("'1'" if keep_pin else "'0'")});
+        }} catch (e) {{}}
+        </script>
+        """,
+        height=0,
+    )
         
 
 # =========================
@@ -6494,6 +6508,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
