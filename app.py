@@ -563,10 +563,19 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             // localStorage 키가 실제로 존재할 때만 URL 값을 덮어써서,
             // 브라우저 정책/초기 로딩 타이밍으로 localStorage 읽기가 비었을 때
             // 기존 기억값을 0/빈값으로 잘못 초기화하지 않도록 보호한다.
-            // ✅ localStorage에 remember 키가 존재하면 그 값을 우선한다.
-            // (브라우저 재시작 후 URL의 오래된 0/빈값 때문에 체크가 풀리는 현상 방지)
-            if (hasRememberName) setParamFromLocal("remember_name", rememberName ? "1" : "0", true);
-            if (hasRememberPin) setParamFromLocal("remember_pin", rememberPin ? "1" : "0", true);
+            // ✅ remember 플래그는 URL에 명시값(0/1)이 있으면 URL을 우선한다.
+            // - 로그아웃 직후 서버가 갱신한 URL값이 있는데도,
+            //   localStorage의 오래된 값(예: 0)으로 체크가 풀리는 현상을 방지.
+            // - URL값이 비어 있을 때만 localStorage 값으로 보강한다.
+            const urlRememberName = String(p.get("remember_name") || "").trim();
+            const urlRememberPin = String(p.get("remember_pin") || "").trim();
+
+            if (hasRememberName && !["0", "1"].includes(urlRememberName)) {
+                setParamFromLocal("remember_name", rememberName ? "1" : "0");
+            }
+            if (hasRememberPin && !["0", "1"].includes(urlRememberPin)) {
+                setParamFromLocal("remember_pin", rememberPin ? "1" : "0");
+            }
             if (hasSavedName || !rememberName) setParamFromLocal("saved_name", savedName, hasSavedName);
             if (hasSavedPin || !rememberPin) setParamFromLocal("saved_pin", savedPin, hasSavedPin);
 
@@ -6817,6 +6826,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
