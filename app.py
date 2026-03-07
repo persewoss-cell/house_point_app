@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 import io
 import random
+import json
 from decimal import Decimal, ROUND_HALF_UP
 
 # ✅ Altair(차트) - 없어도 앱이 죽지 않게 안전 import
@@ -58,6 +59,141 @@ st.session_state.setdefault("remember_name_check", False)
 st.session_state.setdefault("remember_pin_check", False)
 st.session_state.setdefault("remember_name_pref", False)
 st.session_state.setdefault("remember_pin_pref", False)
+
+
+def _read_persisted_login_from_cookies():
+    """브라우저 쿠키에 저장된 로그인 입력값을 읽어온다."""
+    try:
+        cookies = dict(getattr(st.context, "cookies", {}) or {})
+    except Exception:
+        cookies = {}
+
+    saved_name = str(cookies.get("ce_saved_name", "") or "")
+    saved_pin = str(cookies.get("ce_saved_pin", "") or "")
+    remember_name = str(cookies.get("ce_remember_name", "0") or "0") == "1"
+    remember_pin = str(cookies.get("ce_remember_pin", "0") or "0") == "1"
+    return saved_name, saved_pin, remember_name, remember_pin
+
+
+def _read_login_persistence_defaults():
+    """쿠키/URL 파라미터 기준으로 remember 기본값을 계산한다."""
+    saved_name = ""
+    saved_pin = ""
+    remember_name = False
+    remember_pin = False
+
+    c_saved_name, c_saved_pin, c_remember_name, c_remember_pin = _read_persisted_login_from_cookies()
+    if c_saved_name:
+        saved_name = c_saved_name
+    if c_saved_pin:
+        saved_pin = c_saved_pin
+    if c_remember_name:
+        remember_name = True
+    if c_remember_pin:
+        remember_pin = True
+
+    try:
+        qp_saved_name = str(st.query_params.get("saved_name", "") or "")
+        qp_saved_pin = str(st.query_params.get("saved_pin", "") or "")
+        if qp_saved_name:
+            saved_name = qp_saved_name
+            remember_name = bool(str(st.query_params.get("remember_name", "") or "") == "1")
+        if qp_saved_pin:
+            saved_pin = qp_saved_pin
+            remember_pin = bool(str(st.query_params.get("remember_pin", "") or "") == "1")
+    except Exception:
+        pass
+
+    return saved_name, saved_pin, remember_name, remember_pin
+
+
+def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, remember_pin: bool):
+    """아이디/비밀번호 기억하기 값을 쿠키에 동기화한다."""
+    payload = {
+        "name": str(name or ""),
+        "pin": str(pin or ""),
+        "remember_name": bool(remember_name),
+        "remember_pin": bool(remember_pin),
+    }
+    payload_js = json.dumps(payload, ensure_ascii=False)
+    components.html(
+        f"""
+        <script>
+        const p = {payload_js};
+        const maxAge = 60 * 60 * 24 * 365;
+        const docs = (() => {{
+            const out = [document];
+            try {{
+                if (window.parent && window.parent.document && window.parent.document !== document) {{
+                    out.push(window.parent.document);
+                }}
+            }} catch (e) {{}}
+            return out;
+        }})();
+        const localRead = (key) => {{
+            try {{ return localStorage.getItem(key) || ""; }} catch (e) {{ return ""; }}
+        }};
+        const localWrite = (key, value) => {{
+            try {{ localStorage.setItem(key, String(value)); }} catch (e) {{}}
+        }};
+        const localRemove = (key) => {{
+            try {{ localStorage.removeItem(key); }} catch (e) {{}}
+        }};
+        const remove = (key) => {{
+            docs.forEach((d) => {{
+                d.cookie = `${{key}}=; Max-Age=0; Path=/; SameSite=Lax`;
+            }});
+        }};
+        const write = (key, value) => {{
+            docs.forEach((d) => {{
+                d.cookie = `${{key}}=${{encodeURIComponent(value)}}; Max-Age=${{maxAge}}; Path=/; SameSite=Lax`;
+            }});
+        }};
+
+        const resolveValue = (rawValue, cookieKey, localKey) => {{
+            const v = String(rawValue || "").trim();
+            if (v) return v;
+            const localValue = localRead(localKey).trim();
+            if (localValue) return localValue;
+            const cookieHit = docs
+                .map((d) => String(d.cookie || ""))
+                .find((c) => c.includes(`${{cookieKey}}=`));
+            if (!cookieHit) return "";
+            const match = cookieHit.match(new RegExp(`${{cookieKey}}=([^;]+)`));
+            if (!match || !match[1]) return "";
+            try {{ return decodeURIComponent(match[1]); }} catch (e) {{ return match[1]; }}
+        }};
+
+        const nameValue = resolveValue(p.name, "ce_saved_name", "ce_saved_name");
+        const pinValue = resolveValue(p.pin, "ce_saved_pin", "ce_saved_pin");
+
+        if (p.remember_name && nameValue) {{
+            write("ce_saved_name", nameValue);
+            write("ce_remember_name", "1");
+            localWrite("ce_saved_name", nameValue);
+            localWrite("ce_remember_name", "1");
+        }} else {{
+            remove("ce_saved_name");
+            remove("ce_remember_name");
+            localRemove("ce_saved_name");
+            localRemove("ce_remember_name");
+        }}
+
+        if (p.remember_pin && pinValue) {{
+            write("ce_saved_pin", pinValue);
+            write("ce_remember_pin", "1");
+            localWrite("ce_saved_pin", pinValue);
+            localWrite("ce_remember_pin", "1");
+        }} else {{
+            remove("ce_saved_pin");
+            remove("ce_remember_pin");
+            localRemove("ce_saved_pin");
+            localRemove("ce_remember_pin");
+        }}
+        </script>
+        """,
+        height=0,
+    )
 
 def _inject_login_prefill_from_local_storage():
     """로컬 스토리지에 저장된 로그인 입력값/체크값을 로그인 폼에 주입한다."""
@@ -173,6 +309,8 @@ def _persist_login_inputs(name: str, pin: str):
         height=0,
     )
 
+    _sync_login_persistence_cookies(name, pin, keep_name, keep_pin)
+
 
 def _restore_login_from_query_params():
     """F5/새로고침 시 URL 쿼리파라미터 기반으로 로그인 상태를 복원한다."""
@@ -205,6 +343,13 @@ def _restore_login_from_query_params():
 
 def _restore_remember_flags_from_query_params():
     """로그아웃/새로고침 후에도 기억하기 체크 상태를 유지한다."""
+    saved_name, saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
+
+    if saved_name and not str(st.session_state.get("login_name_input", "") or "").strip():
+        st.session_state["login_name_input"] = saved_name
+    if saved_pin and not str(st.session_state.get("login_pin_input", "") or "").strip():
+        st.session_state["login_pin_input"] = saved_pin
+
     qp = st.query_params
     remember_name_qp = qp.get("remember_name", None)
     remember_pin_qp = qp.get("remember_pin", None)
@@ -223,8 +368,13 @@ def _restore_remember_flags_from_query_params():
 
     if remember_name_checked is not None:
         st.session_state.remember_name_pref = remember_name_checked
+    else:
+        st.session_state.remember_name_pref = bool(default_keep_name)
+
     if remember_pin_checked is not None:
         st.session_state.remember_pin_pref = remember_pin_checked
+    else:
+        st.session_state.remember_pin_pref = bool(default_keep_pin)
 
     # 로그인 폼 체크박스와 영구 remember 상태를 동기화
     st.session_state.remember_name_check = bool(st.session_state.get("remember_name_pref", False))
@@ -263,6 +413,8 @@ def _persist_remember_flags_to_query_params():
         """,
         height=0,
     )
+
+    _sync_login_persistence_cookies(current_name, current_pin, keep_name, keep_pin)
         
 
 # =========================
@@ -6542,4 +6694,3 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
-
