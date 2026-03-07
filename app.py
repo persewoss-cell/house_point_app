@@ -5078,7 +5078,7 @@ with st.sidebar:
                     st.error(res.get("error", "PIN 변경 실패"))
 
 
-_hydrate_login_state_from_local_storage_via_query_params
+_hydrate_login_state_from_local_storage_via_query_params()
 _restore_login_from_query_params()
 if not st.session_state.get("logged_in", False):
     _restore_remember_flags_from_query_params()
@@ -5697,7 +5697,7 @@ if st.session_state.admin_ok:
 
     filtered = accounts
 
-    tab_labels = ["💰입금/출금", "👥 개별 조회", "💼 직업/월급", "📈 투자", "🏷️ 경매", "🍀 복권", "📒 전체통장"]
+    tab_labels = ["💰입금/출금", "👥 개별 조회", "💼 직업/월급", "📈 투자", "🏷️ 경매", "🍀 복권"]
     tabs = st.tabs(tab_labels)
 
     admin_pin = ADMIN_PIN
@@ -6409,48 +6409,6 @@ if st.session_state.admin_ok:
     with tabs[5]:
         render_lottery_admin()
 
-    # -------------------------
-    # 📒 전체통장(사람별 통장 내역)
-    # -------------------------␊
-    with tabs[6]:
-        st.subheader("📒 전체통장 내역")
-        for a in filtered:
-            nm, sid = a["name"], a["student_id"]
-            sres = api_savings_list_by_student_id(sid)
-            savings = sres.get("savings", []) if sres.get("ok") else []
-            sv_total = savings_active_total(savings)
-            bal_now = int(a.get("balance", 0) or 0)
-
-            # ✅ 직업/투자(원금/현재평가) 요약
-            _role = _get_role_name_by_student_id(str(sid))
-            _inv_text, _inv_total = _get_invest_summary_by_student_id(str(sid))
-            asset_total = bal_now + sv_total + int(_inv_total or 0)
-            _inv_principal_text, _inv_principal_total = _get_invest_principal_by_student_id(str(sid))
-
-            with st.expander(
-                f"👤 {nm} | 총액 {asset_total} · 통장 {bal_now} · 적금 {sv_total} · 투자원금 {int(_inv_principal_total)} · 현재평가금 {int(_inv_total)}",
-                expanded=False,
-            ):
-                render_asset_summary(bal_now, savings, invest_now=int(_inv_total or 0))
-
-                # ✅ (PATCH) 전체통장에서도 직업/투자 정보를 다음 줄에 표시
-                r2 = st.columns(3)
-                r2[0].metric("직업", _role if _role else "없음")
-                r2[1].metric("투자 원금", f"{int(_inv_principal_total)}")
-                r2[2].metric("현재 평가금", f"{int(_inv_total)}")
-
-                st.markdown("### 📒 통장내역")
-                txr = api_get_txs_by_student_id(sid, limit=120)
-                if not txr.get("ok"):
-                    st.error(txr.get("error", "내역을 불러오지 못했어요."))
-                else:
-                    df_tx = pd.DataFrame(txr.get("rows", []))
-                    if df_tx.empty:
-                        st.info("거래 내역이 없어요.")
-                    else:
-                        df_tx = df_tx.sort_values("created_at_utc", ascending=False)
-                        render_tx_table(df_tx)
-
     st.stop()
     
 # =========================
@@ -6748,4 +6706,5 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
