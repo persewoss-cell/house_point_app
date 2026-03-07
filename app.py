@@ -468,8 +468,6 @@ def _persist_login_form_state(name_input: str, pin_input: str):
 
     st.session_state.remember_name_pref = bool(effective_keep_name)
     st.session_state.remember_pin_pref = bool(effective_keep_pin)
-    st.session_state.remember_name_check = bool(effective_keep_name)
-    st.session_state.remember_pin_check = bool(effective_keep_pin)
 
     # ✅ 로딩 타이밍으로 입력란이 잠깐 비어 있는 렌더에서도 기존 기억값을 덮어지우지 않게 보호
     effective_saved_name = name_input if name_input else str(existing_saved_name or "")
@@ -6793,6 +6791,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
