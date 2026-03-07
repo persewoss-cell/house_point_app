@@ -57,6 +57,7 @@ st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
 st.session_state.setdefault("remember_login_check", False)
 st.session_state.setdefault("remember_login_pref", False)
+st.session_state.setdefault("remember_login_locked", False)
 st.session_state.setdefault("login_persistence_hydrated", False)
 
 
@@ -101,6 +102,30 @@ def _read_login_persistence_defaults():
         pass
 
     return saved_name, saved_pin, remember_login
+
+
+def _is_remember_login_locked(default_keep_login: bool = False, saved_name: str = "", saved_pin: str = "") -> bool:
+    """한 번 켠 로그인정보 기억하기를 해제되지 않도록 잠금 상태를 계산한다."""
+    return bool(
+        st.session_state.get("remember_login_locked", False)
+        or default_keep_login
+        or str(saved_name or "").strip()
+        or str(saved_pin or "").strip()
+    )
+
+
+def _apply_remember_login_lock(
+    keep_login: bool,
+    default_keep_login: bool = False,
+    saved_name: str = "",
+    saved_pin: str = "",
+) -> bool:
+    """잠금 조건이 있으면 기억하기 체크를 강제로 유지한다."""
+    locked = _is_remember_login_locked(default_keep_login, saved_name, saved_pin)
+    if keep_login:
+        locked = True
+    st.session_state.remember_login_locked = bool(locked)
+    return bool(keep_login or locked)
 
 
 def _sync_login_persistence_cookies(name: str, pin: str, remember_login: bool):
@@ -196,6 +221,7 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_login: bool):
 def _persist_login_inputs(name: str, pin: str):
     """로그인 성공 시 remember 옵션 및 로그인 유지 정보를 저장한다."""
     keep_login = bool(st.session_state.get("remember_login_pref", False))
+    keep_login = _apply_remember_login_lock(keep_login, keep_login, name, pin)
 
     st.query_params["login_keep"] = "1"
     st.query_params["login_name"] = str(name or "")
@@ -248,9 +274,10 @@ def _restore_login_from_query_params():
     if st.session_state.get("logged_in", False):
         return
 
-    _, _, default_keep_login = _read_login_persistence_defaults()
-    st.session_state.remember_login_pref = bool(default_keep_login)
-    st.session_state.remember_login_check = bool(default_keep_login)
+    saved_name, saved_pin, default_keep_login = _read_login_persistence_defaults()
+    effective_keep_login = _apply_remember_login_lock(default_keep_login, default_keep_login, saved_name, saved_pin)
+    st.session_state.remember_login_pref = bool(effective_keep_login)
+    st.session_state.remember_login_check = bool(effective_keep_login)
 
     qp = st.query_params
     if str(qp.get("login_keep", "")) != "1":
@@ -305,12 +332,10 @@ def _restore_remember_flags_from_query_params():
 
     remember_login_checked = _is_checked(remember_login_qp)
 
-    if remember_login_checked is not None:
-        st.session_state.remember_login_pref = remember_login_checked
-    else:
-        st.session_state.remember_login_pref = bool(default_keep_login)
-
-    st.session_state.remember_login_check = bool(st.session_state.get("remember_login_pref", False))
+    keep_login = remember_login_checked if remember_login_checked is not None else bool(default_keep_login)
+    effective_keep_login = _apply_remember_login_lock(keep_login, default_keep_login, saved_name, saved_pin)
+    st.session_state.remember_login_pref = bool(effective_keep_login)
+    st.session_state.remember_login_check = bool(effective_keep_login)
 
 
 def _persist_remember_flags_to_query_params():
@@ -321,11 +346,13 @@ def _persist_remember_flags_to_query_params():
     # 로그인 후/새로고침 후에는 비활성 UI라 초기화될 수 있다.
     # 따라서 로그아웃 시에는 위젯 키보다 remember_login_pref/저장 기본값을 우선 신뢰한다.
     keep_login = bool(
+    keep_login = bool(
         st.session_state.get(
             "remember_login_pref",
             st.session_state.get("remember_login_check", default_keep_login),
         )
     )
+    keep_login = _apply_remember_login_lock(keep_login, default_keep_login, default_saved_name, default_saved_pin)
 
     # 로그인 화면이 아닌 상태(로그인 완료/새로고침 직후)에서는
     # remember 위젯 키가 기본값(False)로 재생성될 수 있다.
@@ -383,6 +410,7 @@ def _persist_login_form_state(name_input: str, pin_input: str):
     keep_login = bool(st.session_state.get("remember_login_pref", False))
 
     existing_saved_name, existing_saved_pin, default_keep_login = _read_login_persistence_defaults()
+    keep_login = _apply_remember_login_lock(keep_login, default_keep_login, existing_saved_name, existing_saved_pin)
     name_input = str(name_input or "").strip()
     pin_input = str(pin_input or "").strip()
 
@@ -408,9 +436,12 @@ def _persist_login_form_state(name_input: str, pin_input: str):
             return
         st.session_state.login_persistence_hydrated = True
 
-    effective_keep_login = bool(keep_login)
+    effective_keep_login = _apply_remember_login_lock(
+        bool(keep_login), default_keep_login, existing_saved_name, existing_saved_pin
+    )
 
     st.session_state.remember_login_pref = bool(effective_keep_login)
+    st.session_state.remember_login_check = bool(effective_keep_login)
 
     effective_saved_name = name_input if name_input else str(existing_saved_name or "")
     effective_saved_pin = pin_input if pin_input else str(existing_saved_pin or "")
@@ -5135,7 +5166,10 @@ if not st.session_state.logged_in:
         remember_login_widget = st.checkbox("로그인정보 기억하기", key="remember_login_check")
         login_btn = st.form_submit_button("로그인", use_container_width=True)
 
+    remember_locked = bool(st.session_state.get("remember_login_locked", False))
+    remember_login_widget = bool(remember_login_widget or remember_locked)
     st.session_state.remember_login_pref = bool(remember_login_widget)
+    st.session_state.remember_login_check = bool(remember_login_widget)
 
     _persist_login_form_state(login_name, login_pin)
 
@@ -6730,6 +6764,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
