@@ -212,13 +212,27 @@ def _persist_login_inputs(name: str, pin: str):
             const name = {name!r};
             const pin = {pin!r};
 
-            localStorage.setItem("ce_remember_login", keepLogin ? "1" : "0");
+            const storage = (() => {{
+                try {{
+                    if (window.parent && window.parent.localStorage) return window.parent.localStorage;
+                }} catch (e) {{}}
+                try {{ return window.localStorage; }} catch (e) {{ return null; }}
+            }})();
+
+            const setItem = (k, v) => {{
+                try {{ if (storage) storage.setItem(k, String(v)); }} catch (e) {{}}
+            }};
+            const removeItem = (k) => {{
+                try {{ if (storage) storage.removeItem(k); }} catch (e) {{}}
+            }};
+
+            setItem("ce_remember_login", keepLogin ? "1" : "0");
             if (keepLogin) {{
-                localStorage.setItem("ce_saved_login_name", name);
-                localStorage.setItem("ce_saved_login_pin", pin);
+                setItem("ce_saved_login_name", name);
+                setItem("ce_saved_login_pin", pin);
             }} else {{
-                localStorage.removeItem("ce_saved_login_name");
-                localStorage.removeItem("ce_saved_login_pin");
+                removeItem("ce_saved_login_name");
+                removeItem("ce_saved_login_pin");
             }}
         }} catch (e) {{}}
         </script>
@@ -373,9 +387,7 @@ def _persist_login_form_state(name_input: str, pin_input: str):
             return
         st.session_state.login_persistence_hydrated = True
 
-    effective_keep_login = keep_login
-    if not keep_login and bool(default_keep_login):
-        effective_keep_login = True
+    effective_keep_login = bool(keep_login)
 
     st.session_state.remember_login_pref = bool(effective_keep_login)
 
@@ -6697,3 +6709,4 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
