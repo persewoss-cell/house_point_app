@@ -235,6 +235,8 @@ def _persist_remember_flags_to_query_params():
     """로그인 상태와 무관하게 기억하기 체크 상태를 URL/로컬스토리지에 반영한다."""
     keep_name = bool(st.session_state.get("remember_name_pref", False))
     keep_pin = bool(st.session_state.get("remember_pin_pref", False))
+    current_name = str(st.session_state.get("login_name", "") or "")
+    current_pin = str(st.session_state.get("login_pin", "") or "")
     st.query_params["remember_name"] = "1" if keep_name else "0"
     st.query_params["remember_pin"] = "1" if keep_pin else "0"
     
@@ -246,6 +248,16 @@ def _persist_remember_flags_to_query_params():
         try {{
             localStorage.setItem("ce_remember_name", {("'1'" if keep_name else "'0'")});
             localStorage.setItem("ce_remember_pin", {("'1'" if keep_pin else "'0'")});
+
+            // ✅ 로그아웃 시점에도 remember 상태에 맞춰 저장된 입력값을 동기화한다.
+            // (브라우저 재시작 후 체크만 남고 입력값이 비는 현상 방지)
+            const currentName = {current_name!r};
+            const currentPin = {current_pin!r};
+            if ({str(keep_name).lower()}) localStorage.setItem("ce_saved_name", currentName);
+            else localStorage.removeItem("ce_saved_name");
+
+            if ({str(keep_pin).lower()}) localStorage.setItem("ce_saved_pin", currentPin);
+            else localStorage.removeItem("ce_saved_pin");
         }} catch (e) {{}}
         </script>
         """,
@@ -6530,6 +6542,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
