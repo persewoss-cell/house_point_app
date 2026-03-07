@@ -327,6 +327,19 @@ def _persist_remember_flags_to_query_params():
         )
     )
 
+    # 로그인 화면이 아닌 상태(로그인 완료/새로고침 직후)에서는
+    # remember 위젯 키가 기본값(False)로 재생성될 수 있다.
+    # 이미 저장된 remember 단서가 있으면 로그아웃 시 보수적으로 유지한다.
+    qp_remember_login = str(st.query_params.get("remember_login", "") or "").strip()
+    had_persisted_login_hint = bool(
+        default_keep_login
+        or default_saved_name
+        or default_saved_pin
+        or qp_remember_login == "1"
+    )
+    if st.session_state.get("logged_in", False) and not keep_login and had_persisted_login_hint:
+        keep_login = True
+
     current_name = str(st.session_state.get("login_name", "") or "").strip()
     current_pin = str(st.session_state.get("login_pin", "") or "").strip()
     if keep_login and not current_name:
@@ -6717,5 +6730,6 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
