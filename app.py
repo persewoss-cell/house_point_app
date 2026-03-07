@@ -101,6 +101,10 @@ def _read_login_persistence_defaults():
     except Exception:
         pass
 
+    # remember 플래그가 누락됐더라도 저장된 이름/PIN이 있으면 기억하기를 복원한다.
+    if not remember_login and (str(saved_name).strip() or str(saved_pin).strip()):
+        remember_login = True
+
     return saved_name, saved_pin, remember_login
 
 
@@ -516,14 +520,14 @@ def _hydrate_login_state_from_local_storage_via_query_params():
 
             const localRememberLogin = read("ce_remember_login") === "1";
             const cookieRememberLogin = readCookie("ce_remember_login") === "1";
-            const rememberLogin = localRememberLogin || cookieRememberLogin;
+            const rememberLoginFlag = localRememberLogin || cookieRememberLogin;
 
-            const savedName = rememberLogin
-                ? (read("ce_saved_login_name") || readCookie("ce_saved_login_name"))
-                : "";
-            const savedPin = rememberLogin
-                ? (read("ce_saved_login_pin") || readCookie("ce_saved_login_pin"))
-                : "";
+            const savedName = read("ce_saved_login_name") || readCookie("ce_saved_login_name");
+            const savedPin = read("ce_saved_login_pin") || readCookie("ce_saved_login_pin");
+
+            // 일부 환경에서 ce_remember_login 키가 유실되어도
+            // 저장된 이름/PIN이 있으면 remember=true로 간주한다.
+            const rememberLogin = rememberLoginFlag || Boolean(savedName || savedPin);
 
             const hasRememberLogin = hasKey("ce_remember_login") || hasCookie("ce_remember_login");
             const hasSavedName = hasKey("ce_saved_login_name") || hasCookie("ce_saved_login_name");
@@ -543,8 +547,8 @@ def _hydrate_login_state_from_local_storage_via_query_params():
 
             const urlRememberLogin = String(p.get("remember_login") || "").trim();
 
-            if (hasRememberLogin && !["0", "1"].includes(urlRememberLogin)) {
-                setParamFromLocal("remember_login", rememberLogin ? "1" : "0");
+            if (hasRememberLogin || hasSavedName || hasSavedPin) {
+                setParamFromLocal("remember_login", rememberLogin ? "1" : "0", true);
             }
             if (hasSavedName || !rememberLogin) setParamFromLocal("saved_name", savedName, hasSavedName);
             if (hasSavedPin || !rememberLogin) setParamFromLocal("saved_pin", savedPin, hasSavedPin);
@@ -6800,12 +6804,3 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
-    
-
-
-
-
-
-
-
-
