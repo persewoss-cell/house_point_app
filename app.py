@@ -516,36 +516,61 @@ def _hydrate_login_form_dom_from_storage():
             })();
 
             const findTextInput = (labelText, isPassword = false) => {
-                const labels = Array.from(rootDoc.querySelectorAll('[data-testid="stWidgetLabel"]'));
-                const label = labels.find((el) => String(el.textContent || "").trim() === labelText);
-                if (!label) return null;
-                const block = label.closest('[data-testid="stTextInput"]');
-                if (!block) return null;
-                const input = block.querySelector('input');
-                if (!input) return null;
-                if (isPassword && input.type !== "password") return null;
-                return input;
+                const candidates = [
+                    ...Array.from(rootDoc.querySelectorAll(`input[aria-label="${labelText}"]`)),
+                    ...Array.from(rootDoc.querySelectorAll('input')),
+                ];
+                return candidates.find((input) => {
+                    if (!input || input.tagName !== "INPUT") return false;
+                    const aria = String(input.getAttribute("aria-label") || "").trim();
+                    const typeOk = isPassword ? input.type === "password" : input.type !== "password";
+                    if (aria === labelText && typeOk) return true;
+                    if (aria && aria !== labelText) return false;
+                    if (!typeOk) return false;
+                    const block = input.closest('[data-testid="stTextInput"]');
+                    if (!block) return false;
+                    const label = block.querySelector('[data-testid="stWidgetLabel"]');
+                    return String(label?.textContent || "").trim() === labelText;
+                }) || null;
             };
 
             const setInputValue = (el, value) => {
-                if (!el || !value) return;
+                const v = String(value || "").trim();
+                if (!el || !v) return;
                 if (String(el.value || "").trim()) return;
-                el.focus();
-                el.value = value;
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                if (setter) setter.call(el, v);
+                else el.value = v;
                 el.dispatchEvent(new Event("input", { bubbles: true }));
                 el.dispatchEvent(new Event("change", { bubbles: true }));
+                el.dispatchEvent(new Event("blur", { bubbles: true }));
             };
 
-            setInputValue(findTextInput("이름"), savedName);
-            setInputValue(findTextInput("비밀번호(4자리)", true), savedPin);
+            const findRememberCheckbox = () => {
+                const byAria = rootDoc.querySelector('input[type="checkbox"][aria-label="로그인정보 기억하기"]');
+                if (byAria) return byAria;
+                const byLabel = Array.from(rootDoc.querySelectorAll('label')).find((el) =>
+                    String(el.textContent || "").includes("로그인정보 기억하기")
+                );
+                if (!byLabel) return null;
+                return byLabel.querySelector('input[type="checkbox"]') || byLabel.previousElementSibling;
+            };
 
-            const checkboxLabel = Array.from(rootDoc.querySelectorAll('label')).find((el) =>
-                String(el.textContent || "").includes("로그인정보 기억하기")
-            );
-            const checkbox = checkboxLabel ? checkboxLabel.querySelector('input[type="checkbox"]') : null;
-            if (checkbox && shouldRemember && !checkbox.checked) {
-                checkbox.click();
-            }
+            const applyHydration = () => {
+                setInputValue(findTextInput("이름"), savedName);
+                setInputValue(findTextInput("비밀번호(4자리)", true), savedPin);
+
+                const checkbox = findRememberCheckbox();
+                if (checkbox && shouldRemember && !checkbox.checked) {
+                    checkbox.click();
+                    checkbox.dispatchEvent(new Event("input", { bubbles: true }));
+                    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+            };
+
+            applyHydration();
+            setTimeout(applyHydration, 120);
+            setTimeout(applyHydration, 380);
         })();
         </script>
         """,
@@ -6935,5 +6960,6 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
