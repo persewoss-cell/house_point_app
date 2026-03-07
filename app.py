@@ -346,7 +346,6 @@ def _persist_remember_flags_to_query_params():
     # 로그인 후/새로고침 후에는 비활성 UI라 초기화될 수 있다.
     # 따라서 로그아웃 시에는 위젯 키보다 remember_login_pref/저장 기본값을 우선 신뢰한다.
     keep_login = bool(
-    keep_login = bool(
         st.session_state.get(
             "remember_login_pref",
             st.session_state.get("remember_login_check", default_keep_login),
@@ -6764,6 +6763,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
