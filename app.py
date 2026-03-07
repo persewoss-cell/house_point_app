@@ -540,9 +540,12 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             const p = url.searchParams;
             let changed = false;
 
-            const setParam = (key, value) => {
-                const curr = String(p.get(key) || "");
-                if (curr === value) return;
+            const setParamIfMissing = (key, value) => {
+                const curr = String(p.get(key) || "").trim();
+                // ✅ 서버에서 방금 기록한 URL 값을 localStorage의 오래된 값이
+                // 덮어쓰지 않도록, 쿼리 파라미터가 비어 있을 때만 보강한다.
+                if (curr) return;
+                if (curr === String(value || "")) return;
                 p.set(key, value);
                 changed = true;
             };
@@ -550,10 +553,10 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             // localStorage 키가 실제로 존재할 때만 URL 값을 덮어써서,
             // 브라우저 정책/초기 로딩 타이밍으로 localStorage 읽기가 비었을 때
             // 기존 기억값을 0/빈값으로 잘못 초기화하지 않도록 보호한다.
-            if (hasRememberName) setParam("remember_name", rememberName ? "1" : "0");
-            if (hasRememberPin) setParam("remember_pin", rememberPin ? "1" : "0");
-            if (hasSavedName || !rememberName) setParam("saved_name", savedName);
-            if (hasSavedPin || !rememberPin) setParam("saved_pin", savedPin);
+            if (hasRememberName) setParamIfMissing("remember_name", rememberName ? "1" : "0");
+            if (hasRememberPin) setParamIfMissing("remember_pin", rememberPin ? "1" : "0");
+            if (hasSavedName || !rememberName) setParamIfMissing("saved_name", savedName);
+            if (hasSavedPin || !rememberPin) setParamIfMissing("saved_pin", savedPin);
 
             if (changed) {
                 url.search = p.toString();
@@ -6805,6 +6808,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
