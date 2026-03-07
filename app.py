@@ -108,12 +108,20 @@ def _inject_login_prefill_from_local_storage():
             return wrapper?.querySelector("input") || null;
         };
 
+        const findInputByWidgetKey = (root, widgetKey) => {
+            return root.querySelector(`input[id*="${widgetKey}"]`)
+                || root.querySelector(`input[name*="${widgetKey}"]`)
+                || null;
+        };
+
         const tryFill = () => {
             const root = window.parent?.document || document;
-            const nameInput = findInputByLabelText(root, "이름")
+            const nameInput = findInputByWidgetKey(root, "login_name_input")
+                || findInputByLabelText(root, "이름")
                 || root.querySelector('input[aria-label="이름"]')
                 || root.querySelector('input[type="text"]');
-            const pinInput = findInputByLabelText(root, "비밀번호")
+            const pinInput = findInputByWidgetKey(root, "login_pin_input")
+                || findInputByLabelText(root, "비밀번호")
                 || root.querySelector('input[aria-label*="비밀번호"]')
                 || root.querySelector('input[type="password"]');
 
@@ -131,9 +139,21 @@ def _inject_login_prefill_from_local_storage():
         };
 
         tryFill();
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", tryFill, { once: true });
+        }
         setTimeout(tryFill, 120);
         setTimeout(tryFill, 420);
         setTimeout(tryFill, 900);
+        setTimeout(tryFill, 1600);
+
+        let observer;
+        try {
+            const target = window.parent?.document?.body || document.body;
+            observer = new MutationObserver(() => tryFill());
+            observer.observe(target, { childList: true, subtree: true });
+            setTimeout(() => observer && observer.disconnect(), 2500);
+        } catch (e) {}
         </script>
         """,
         height=0,
@@ -6542,6 +6562,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
