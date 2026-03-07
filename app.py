@@ -204,8 +204,23 @@ def _restore_login_from_query_params():
 def _restore_remember_flags_from_query_params():
     """로그아웃/새로고침 후에도 기억하기 체크 상태를 유지한다."""
     qp = st.query_params
-    st.session_state.remember_name_check = str(qp.get("remember_name", "0")) == "1"
-    st.session_state.remember_pin_check = str(qp.get("remember_pin", "0")) == "1"
+    remember_name_qp = qp.get("remember_name", None)
+    remember_pin_qp = qp.get("remember_pin", None)
+
+    # ✅ 쿼리 파라미터가 있을 때만 덮어쓴다.
+    # (로그아웃 직후 URL 동기화 타이밍 이슈로 값이 잠깐 비어도 체크가 풀리지 않게 보호)
+    if remember_name_qp is not None:
+        st.session_state.remember_name_check = str(remember_name_qp) == "1"
+    if remember_pin_qp is not None:
+        st.session_state.remember_pin_check = str(remember_pin_qp) == "1"
+
+
+def _persist_remember_flags_to_query_params():
+    """로그인 상태와 무관하게 기억하기 체크 상태를 URL에 반영한다."""
+    keep_name = bool(st.session_state.get("remember_name_check", False))
+    keep_pin = bool(st.session_state.get("remember_pin_check", False))
+    st.query_params["remember_name"] = "1" if keep_name else "0"
+    st.query_params["remember_pin"] = "1" if keep_pin else "0"
         
 
 # =========================
@@ -4878,6 +4893,8 @@ if not st.session_state.logged_in:
 
 else:
     if st.button("로그아웃", key="logout_btn", use_container_width=True):
+        # ✅ 로그아웃해도 기억하기 체크 상태는 유지
+        _persist_remember_flags_to_query_params()
         st.session_state.logged_in = False
         st.session_state.admin_ok = False
         st.session_state.login_name = ""
@@ -6477,6 +6494,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
