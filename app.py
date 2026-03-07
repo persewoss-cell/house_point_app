@@ -178,11 +178,13 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
         const nameValue = resolveValue(p.name, "ce_saved_name", "ce_saved_name");
         const pinValue = resolveValue(p.pin, "ce_saved_pin", "ce_saved_pin");
 
-        if (p.remember_name && nameValue) {{
-            write("ce_saved_name", nameValue);
+        if (p.remember_name) {{
             write("ce_remember_name", "1");
-            localWrite("ce_saved_name", nameValue);
             localWrite("ce_remember_name", "1");
+            if (nameValue) {{
+                write("ce_saved_name", nameValue);
+                localWrite("ce_saved_name", nameValue);
+            }}
         }} else {{
             remove("ce_saved_name");
             remove("ce_remember_name");
@@ -190,11 +192,13 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
             localRemove("ce_remember_name");
         }}
 
-        if (p.remember_pin && pinValue) {{
-            write("ce_saved_pin", pinValue);
+        if (p.remember_pin) {{
             write("ce_remember_pin", "1");
-            localWrite("ce_saved_pin", pinValue);
             localWrite("ce_remember_pin", "1");
+            if (pinValue) {{
+                write("ce_saved_pin", pinValue);
+                localWrite("ce_saved_pin", pinValue);
+            }}
         }} else {{
             remove("ce_saved_pin");
             remove("ce_remember_pin");
@@ -6791,6 +6795,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
