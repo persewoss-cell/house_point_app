@@ -540,11 +540,9 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             const p = url.searchParams;
             let changed = false;
 
-            const setParamIfMissing = (key, value) => {
+            const setParamFromLocal = (key, value, force = false) => {
                 const curr = String(p.get(key) || "").trim();
-                // ✅ 서버에서 방금 기록한 URL 값을 localStorage의 오래된 값이
-                // 덮어쓰지 않도록, 쿼리 파라미터가 비어 있을 때만 보강한다.
-                if (curr) return;
+                if (!force && curr) return;
                 if (curr === String(value || "")) return;
                 p.set(key, value);
                 changed = true;
@@ -553,10 +551,12 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             // localStorage 키가 실제로 존재할 때만 URL 값을 덮어써서,
             // 브라우저 정책/초기 로딩 타이밍으로 localStorage 읽기가 비었을 때
             // 기존 기억값을 0/빈값으로 잘못 초기화하지 않도록 보호한다.
-            if (hasRememberName) setParamIfMissing("remember_name", rememberName ? "1" : "0");
-            if (hasRememberPin) setParamIfMissing("remember_pin", rememberPin ? "1" : "0");
-            if (hasSavedName || !rememberName) setParamIfMissing("saved_name", savedName);
-            if (hasSavedPin || !rememberPin) setParamIfMissing("saved_pin", savedPin);
+            // ✅ localStorage에 remember 키가 존재하면 그 값을 우선한다.
+            // (브라우저 재시작 후 URL의 오래된 0/빈값 때문에 체크가 풀리는 현상 방지)
+            if (hasRememberName) setParamFromLocal("remember_name", rememberName ? "1" : "0", true);
+            if (hasRememberPin) setParamFromLocal("remember_pin", rememberPin ? "1" : "0", true);
+            if (hasSavedName || !rememberName) setParamFromLocal("saved_name", savedName, hasSavedName);
+            if (hasSavedPin || !rememberPin) setParamFromLocal("saved_pin", savedPin, hasSavedPin);
 
             if (changed) {
                 url.search = p.toString();
@@ -5194,9 +5194,6 @@ else:
     st.subheader("🔐 로그인")
 
 if not st.session_state.logged_in:
-    st.session_state.remember_name_check = bool(st.session_state.get("remember_name_pref", False))
-    st.session_state.remember_pin_check = bool(st.session_state.get("remember_pin_pref", False))
-
     # ✅ Enter로 로그인 제출 가능하도록 form 사용
     with st.form("login_form", clear_on_submit=False):
         login_c1, login_c2 = st.columns(2)
@@ -6808,6 +6805,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
