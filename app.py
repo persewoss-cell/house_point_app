@@ -219,10 +219,20 @@ def _inject_login_prefill_from_local_storage():
             try { return String(localStorage.getItem(key) || "").trim(); } catch (e) { return ""; }
         };
 
-        const savedName = read("ce_saved_name");
-        const savedPin = read("ce_saved_pin");
-        const rememberName = read("ce_remember_name") === "1";
-        const rememberPin = read("ce_remember_pin") === "1";
+        const url = new URL(window.parent?.location?.href || window.location.href);
+        const qpRememberName = String(url.searchParams.get("remember_name") || "").trim();
+        const qpRememberPin = String(url.searchParams.get("remember_pin") || "").trim();
+        const qpSavedName = String(url.searchParams.get("saved_name") || "").trim();
+        const qpSavedPin = String(url.searchParams.get("saved_pin") || "").trim();
+
+        const rememberName = (qpRememberName === "0" || qpRememberName === "1")
+            ? qpRememberName === "1"
+            : read("ce_remember_name") === "1";
+        const rememberPin = (qpRememberPin === "0" || qpRememberPin === "1")
+            ? qpRememberPin === "1"
+            : read("ce_remember_pin") === "1";
+        const savedName = rememberName ? (qpSavedName || read("ce_saved_name")) : "";
+        const savedPin = rememberPin ? (qpSavedPin || read("ce_saved_pin")) : "";
 
         const setNativeValue = (el, value) => {
             const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
@@ -6795,6 +6805,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
