@@ -210,99 +210,6 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
         height=0,
     )
 
-def _inject_login_prefill_from_local_storage():
-    """로컬 스토리지에 저장된 로그인 입력값/체크값을 로그인 폼에 주입한다."""
-    components.html(
-        """
-        <script>
-        const read = (key) => {
-            try { return String(localStorage.getItem(key) || "").trim(); } catch (e) { return ""; }
-        };
-        const hasKey = (key) => {
-            try { return localStorage.getItem(key) !== null; } catch (e) { return false; }
-        };
-
-        const url = new URL(window.parent?.location?.href || window.location.href);
-        const qpRememberName = String(url.searchParams.get("remember_name") || "").trim();
-        const qpRememberPin = String(url.searchParams.get("remember_pin") || "").trim();
-        const qpSavedName = String(url.searchParams.get("saved_name") || "").trim();
-        const qpSavedPin = String(url.searchParams.get("saved_pin") || "").trim();
-
-        const rememberName = hasKey("ce_remember_name")
-            ? read("ce_remember_name") === "1"
-            : (qpRememberName === "1");
-        const rememberPin = hasKey("ce_remember_pin")
-            ? read("ce_remember_pin") === "1"
-            : (qpRememberPin === "1");
-        const savedName = rememberName ? (qpSavedName || read("ce_saved_name")) : "";
-        const savedPin = rememberPin ? (qpSavedPin || read("ce_saved_pin")) : "";
-
-        const setNativeValue = (el, value) => {
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-            if (!setter || !el) return;
-            setter.call(el, value);
-            el.dispatchEvent(new Event("input", { bubbles: true }));
-            el.dispatchEvent(new Event("change", { bubbles: true }));
-        };
-
-        const clickCheckboxIfNeeded = (el, shouldBeChecked) => {
-            if (!el) return;
-            if (Boolean(el.checked) !== Boolean(shouldBeChecked)) {
-                el.click();
-            }
-        };
-
-        const findCheckboxByLabel = (root, labelText) => {
-            const rows = Array.from(root.querySelectorAll("div[data-testid='stCheckbox']"));
-            const hit = rows.find((row) => {
-                const label = row.querySelector("label")?.innerText || "";
-                return label.includes(labelText);
-            });
-            return hit?.querySelector("input[type='checkbox']") || null;
-        };
-
-        const findInputByLabelText = (root, labelText) => {
-            const labels = Array.from(root.querySelectorAll("label"));
-            const hit = labels.find((label) => {
-                const t = String(label.innerText || "").trim();
-                return t.includes(labelText);
-            });
-            if (!hit) return null;
-            const wrapper = hit.closest("div[data-testid='stTextInput']") || hit.parentElement;
-            return wrapper?.querySelector("input") || null;
-        };
-
-        const tryFill = () => {
-            const root = window.parent?.document || document;
-            const nameInput = findInputByLabelText(root, "이름")
-                || root.querySelector('input[aria-label="이름"]')
-                || root.querySelector('input[type="text"]');
-            const pinInput = findInputByLabelText(root, "비밀번호")
-                || root.querySelector('input[aria-label*="비밀번호"]')
-                || root.querySelector('input[type="password"]');
-
-            if (savedName && nameInput && !String(nameInput.value || "").trim()) {
-                setNativeValue(nameInput, savedName);
-            }
-            if (savedPin && pinInput && !String(pinInput.value || "").trim()) {
-                setNativeValue(pinInput, savedPin);
-            }
-
-            const rememberNameCheckbox = findCheckboxByLabel(root, "아이디 기억하기");
-            const rememberPinCheckbox = findCheckboxByLabel(root, "비밀번호 기억하기");
-            clickCheckboxIfNeeded(rememberNameCheckbox, rememberName);
-            clickCheckboxIfNeeded(rememberPinCheckbox, rememberPin);
-        };
-
-        tryFill();
-        setTimeout(tryFill, 120);
-        setTimeout(tryFill, 420);
-        setTimeout(tryFill, 900);
-        </script>
-        """,
-        height=0,
-    )
-
 
 def _persist_login_inputs(name: str, pin: str):
     """로그인 성공 시 remember 옵션 및 로그인 유지 정보를 저장한다."""
@@ -383,12 +290,21 @@ def _restore_remember_flags_from_query_params():
     """로그아웃/새로고침 후에도 기억하기 체크 상태를 유지한다."""
     saved_name, saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
 
-    if saved_name and not str(st.session_state.get("login_name_input", "") or "").strip():
+    qp = st.query_params
+    qp_saved_name = str(qp.get("saved_name", "") or "").strip()
+    qp_saved_pin = str(qp.get("saved_pin", "") or "").strip()
+
+    # ✅ query_params에 remember 입력값이 있으면 session_state를 먼저 복원한다.
+    if qp_saved_name:
+        st.session_state["login_name_input"] = qp_saved_name
+    elif saved_name and not str(st.session_state.get("login_name_input", "") or "").strip():
         st.session_state["login_name_input"] = saved_name
-    if saved_pin and not str(st.session_state.get("login_pin_input", "") or "").strip():
+
+    if qp_saved_pin:
+        st.session_state["login_pin_input"] = qp_saved_pin
+    elif saved_pin and not str(st.session_state.get("login_pin_input", "") or "").strip():
         st.session_state["login_pin_input"] = saved_pin
 
-    qp = st.query_params
     remember_name_qp = qp.get("remember_name", None)
     remember_pin_qp = qp.get("remember_pin", None)
 
@@ -5243,9 +5159,18 @@ if not st.session_state.logged_in:
     with st.form("login_form", clear_on_submit=False):
         login_c1, login_c2 = st.columns(2)
         with login_c1:
-            login_name = st.text_input("이름", key="login_name_input").strip()
+            login_name = st.text_input(
+                "이름",
+                key="login_name_input",
+                value=str(st.session_state.get("login_name_input", "") or ""),
+            ).strip()
         with login_c2:
-            login_pin = st.text_input("비밀번호(4자리)", type="password", key="login_pin_input").strip()
+            login_pin = st.text_input(
+                "비밀번호(4자리)",
+                type="password",
+                key="login_pin_input",
+                value=str(st.session_state.get("login_pin_input", "") or ""),
+            ).strip()
         remember_c1, remember_c2 = st.columns(2)
         with remember_c1:
             remember_name_widget = st.checkbox("아이디 기억하기", key="remember_name_check")
@@ -5257,7 +5182,6 @@ if not st.session_state.logged_in:
     st.session_state.remember_pin_pref = bool(remember_pin_widget)
 
     _persist_login_form_state(login_name, login_pin)
-    _inject_login_prefill_from_local_storage()
 
     if login_btn:
         if not login_name:
@@ -6850,3 +6774,4 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
