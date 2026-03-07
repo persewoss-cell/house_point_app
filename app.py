@@ -55,10 +55,8 @@ st.session_state.setdefault("auction_refund_option", "선택")
 st.session_state.setdefault("auction_result_visible", False)
 st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
-st.session_state.setdefault("remember_name_check", False)
-st.session_state.setdefault("remember_pin_check", False)
-st.session_state.setdefault("remember_name_pref", False)
-st.session_state.setdefault("remember_pin_pref", False)
+st.session_state.setdefault("remember_login_check", False)
+st.session_state.setdefault("remember_login_pref", False)
 st.session_state.setdefault("login_persistence_hydrated", False)
 
 
@@ -69,39 +67,32 @@ def _read_persisted_login_from_cookies():
     except Exception:
         cookies = {}
 
-    saved_name = str(cookies.get("ce_saved_name", "") or "")
-    saved_pin = str(cookies.get("ce_saved_pin", "") or "")
-    remember_name = str(cookies.get("ce_remember_name", "0") or "0") == "1"
-    remember_pin = str(cookies.get("ce_remember_pin", "0") or "0") == "1"
-    return saved_name, saved_pin, remember_name, remember_pin
+    saved_name = str(cookies.get("ce_saved_login_name", "") or "")
+    saved_pin = str(cookies.get("ce_saved_login_pin", "") or "")
+    remember_login = str(cookies.get("ce_remember_login", "0") or "0") == "1"
+    return saved_name, saved_pin, remember_login
 
 
 def _read_login_persistence_defaults():
     """쿠키/URL 파라미터 기준으로 remember 기본값을 계산한다."""
     saved_name = ""
     saved_pin = ""
-    remember_name = False
-    remember_pin = False
+    remember_login = False
 
-    c_saved_name, c_saved_pin, c_remember_name, c_remember_pin = _read_persisted_login_from_cookies()
+    c_saved_name, c_saved_pin, c_remember_login = _read_persisted_login_from_cookies()
     if c_saved_name:
         saved_name = c_saved_name
     if c_saved_pin:
         saved_pin = c_saved_pin
-    if c_remember_name:
-        remember_name = True
-    if c_remember_pin:
-        remember_pin = True
+    if c_remember_login:
+        remember_login = True
 
     try:
-        qp_remember_name = str(st.query_params.get("remember_name", "") or "")
-        qp_remember_pin = str(st.query_params.get("remember_pin", "") or "")        
+        qp_remember_login = str(st.query_params.get("remember_login", "") or "")
         qp_saved_name = str(st.query_params.get("saved_name", "") or "")
         qp_saved_pin = str(st.query_params.get("saved_pin", "") or "")
-        if qp_remember_name in {"0", "1"}:
-            remember_name = qp_remember_name == "1"
-        if qp_remember_pin in {"0", "1"}:
-            remember_pin = qp_remember_pin == "1"        
+        if qp_remember_login in {"0", "1"}:
+            remember_login = qp_remember_login == "1"
         if qp_saved_name:
             saved_name = qp_saved_name
         if qp_saved_pin:
@@ -109,16 +100,15 @@ def _read_login_persistence_defaults():
     except Exception:
         pass
 
-    return saved_name, saved_pin, remember_name, remember_pin
+    return saved_name, saved_pin, remember_login
 
 
-def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, remember_pin: bool):
-    """아이디/비밀번호 기억하기 값을 쿠키에 동기화한다."""
+def _sync_login_persistence_cookies(name: str, pin: str, remember_login: bool):
+    """로그인정보 기억하기 값을 쿠키에 동기화한다."""
     payload = {
         "name": str(name or ""),
         "pin": str(pin or ""),
-        "remember_name": bool(remember_name),
-        "remember_pin": bool(remember_pin),
+        "remember_login": bool(remember_login),
     }
     payload_js = json.dumps(payload, ensure_ascii=False)
     components.html(
@@ -175,35 +165,27 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
             try {{ return decodeURIComponent(match[1]); }} catch (e) {{ return match[1]; }}
         }};
 
-        const nameValue = resolveValue(p.name, "ce_saved_name", "ce_saved_name");
-        const pinValue = resolveValue(p.pin, "ce_saved_pin", "ce_saved_pin");
+        const nameValue = resolveValue(p.name, "ce_saved_login_name", "ce_saved_login_name");
+        const pinValue = resolveValue(p.pin, "ce_saved_login_pin", "ce_saved_login_pin");
 
-        if (p.remember_name) {{
-            write("ce_remember_name", "1");
-            localWrite("ce_remember_name", "1");
+        if (p.remember_login) {{
+            write("ce_remember_login", "1");
+            localWrite("ce_remember_login", "1");
             if (nameValue) {{
-                write("ce_saved_name", nameValue);
-                localWrite("ce_saved_name", nameValue);
+                write("ce_saved_login_name", nameValue);
+                localWrite("ce_saved_login_name", nameValue);
             }}
-        }} else {{
-            remove("ce_saved_name");
-            remove("ce_remember_name");
-            localRemove("ce_saved_name");
-            localRemove("ce_remember_name");
-        }}
-
-        if (p.remember_pin) {{
-            write("ce_remember_pin", "1");
-            localWrite("ce_remember_pin", "1");
             if (pinValue) {{
-                write("ce_saved_pin", pinValue);
-                localWrite("ce_saved_pin", pinValue);
+                write("ce_saved_login_pin", pinValue);
+                localWrite("ce_saved_login_pin", pinValue);
             }}
         }} else {{
-            remove("ce_saved_pin");
-            remove("ce_remember_pin");
-            localRemove("ce_saved_pin");
-            localRemove("ce_remember_pin");
+            remove("ce_saved_login_name");
+            remove("ce_saved_login_pin");
+            remove("ce_remember_login");
+            localRemove("ce_saved_login_name");
+            localRemove("ce_saved_login_pin");
+            localRemove("ce_remember_login");
         }}
         </script>
         """,
@@ -213,40 +195,38 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
 
 def _persist_login_inputs(name: str, pin: str):
     """로그인 성공 시 remember 옵션 및 로그인 유지 정보를 저장한다."""
-    keep_name = bool(st.session_state.get("remember_name_pref", False))
-    keep_pin = bool(st.session_state.get("remember_pin_pref", False))
+    keep_login = bool(st.session_state.get("remember_login_pref", False))
 
     st.query_params["login_keep"] = "1"
     st.query_params["login_name"] = str(name or "")
     st.query_params["login_pin"] = str(pin or "")
-    st.query_params["remember_name"] = "1" if keep_name else "0"
-    st.query_params["remember_pin"] = "1" if keep_pin else "0"
-    st.query_params["saved_name"] = str(name or "") if keep_name else ""
-    st.query_params["saved_pin"] = str(pin or "") if keep_pin else ""
-    
+    st.query_params["remember_login"] = "1" if keep_login else "0"
+    st.query_params["saved_name"] = str(name or "") if keep_login else ""
+    st.query_params["saved_pin"] = str(pin or "") if keep_login else ""
+
     components.html(
         f"""
         <script>
         try {{
-            const keepName = {str(keep_name).lower()};
-            const keepPin = {str(keep_pin).lower()};
+            const keepLogin = {str(keep_login).lower()};
             const name = {name!r};
             const pin = {pin!r};
 
-            localStorage.setItem("ce_remember_name", keepName ? "1" : "0");
-            localStorage.setItem("ce_remember_pin", keepPin ? "1" : "0");
-            if (keepName) localStorage.setItem("ce_saved_name", name);
-            else localStorage.removeItem("ce_saved_name");
-
-            if (keepPin) localStorage.setItem("ce_saved_pin", pin);
-            else localStorage.removeItem("ce_saved_pin");
+            localStorage.setItem("ce_remember_login", keepLogin ? "1" : "0");
+            if (keepLogin) {{
+                localStorage.setItem("ce_saved_login_name", name);
+                localStorage.setItem("ce_saved_login_pin", pin);
+            }} else {{
+                localStorage.removeItem("ce_saved_login_name");
+                localStorage.removeItem("ce_saved_login_pin");
+            }}
         }} catch (e) {{}}
         </script>
         """,
         height=0,
     )
 
-    _sync_login_persistence_cookies(name, pin, keep_name, keep_pin)
+    _sync_login_persistence_cookies(name, pin, keep_login)
 
 
 def _restore_login_from_query_params():
@@ -254,13 +234,9 @@ def _restore_login_from_query_params():
     if st.session_state.get("logged_in", False):
         return
 
-    # ✅ 자동 로그인 복원 경로에서도 remember 상태를 먼저 동기화해
-    # 로그아웃 시 체크 상태/저장값이 false로 덮어써지는 것을 방지한다.
-    _, _, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
-    st.session_state.remember_name_pref = bool(default_keep_name)
-    st.session_state.remember_pin_pref = bool(default_keep_pin)
-    st.session_state.remember_name_check = bool(default_keep_name)
-    st.session_state.remember_pin_check = bool(default_keep_pin)
+    _, _, default_keep_login = _read_login_persistence_defaults()
+    st.session_state.remember_login_pref = bool(default_keep_login)
+    st.session_state.remember_login_check = bool(default_keep_login)
 
     qp = st.query_params
     if str(qp.get("login_keep", "")) != "1":
@@ -288,13 +264,12 @@ def _restore_login_from_query_params():
 
 def _restore_remember_flags_from_query_params():
     """로그아웃/새로고침 후에도 기억하기 체크 상태를 유지한다."""
-    saved_name, saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
+    saved_name, saved_pin, default_keep_login = _read_login_persistence_defaults()
 
     qp = st.query_params
     qp_saved_name = str(qp.get("saved_name", "") or "").strip()
     qp_saved_pin = str(qp.get("saved_pin", "") or "").strip()
 
-    # ✅ query_params에 remember 입력값이 있으면 session_state를 먼저 복원한다.
     if qp_saved_name:
         st.session_state["login_name_input"] = qp_saved_name
     elif saved_name and not str(st.session_state.get("login_name_input", "") or "").strip():
@@ -305,8 +280,7 @@ def _restore_remember_flags_from_query_params():
     elif saved_pin and not str(st.session_state.get("login_pin_input", "") or "").strip():
         st.session_state["login_pin_input"] = saved_pin
 
-    remember_name_qp = qp.get("remember_name", None)
-    remember_pin_qp = qp.get("remember_pin", None)
+    remember_login_qp = qp.get("remember_login", None)
 
     def _is_checked(v):
         if v is None:
@@ -315,106 +289,82 @@ def _restore_remember_flags_from_query_params():
             v = v[0] if v else ""
         return str(v).strip() == "1"
 
-    # ✅ 쿼리 파라미터가 있을 때만 덮어쓴다.
-    # (로그아웃 직후 URL 동기화 타이밍 이슈로 값이 잠깐 비어도 체크가 풀리지 않게 보호)
-    remember_name_checked = _is_checked(remember_name_qp)
-    remember_pin_checked = _is_checked(remember_pin_qp)
+    remember_login_checked = _is_checked(remember_login_qp)
 
-    if remember_name_checked is not None:
-        st.session_state.remember_name_pref = remember_name_checked
+    if remember_login_checked is not None:
+        st.session_state.remember_login_pref = remember_login_checked
     else:
-        st.session_state.remember_name_pref = bool(default_keep_name)
+        st.session_state.remember_login_pref = bool(default_keep_login)
 
-    if remember_pin_checked is not None:
-        st.session_state.remember_pin_pref = remember_pin_checked
-    else:
-        st.session_state.remember_pin_pref = bool(default_keep_pin)
-
-    # 로그인 폼 체크박스와 영구 remember 상태를 동기화
-    st.session_state.remember_name_check = bool(st.session_state.get("remember_name_pref", False))
-    st.session_state.remember_pin_check = bool(st.session_state.get("remember_pin_pref", False))
+    st.session_state.remember_login_check = bool(st.session_state.get("remember_login_pref", False))
 
 
 def _persist_remember_flags_to_query_params():
     """로그인 상태와 무관하게 기억하기 체크 상태를 URL/로컬스토리지에 반영한다."""
-    default_saved_name, default_saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
+    default_saved_name, default_saved_pin, default_keep_login = _read_login_persistence_defaults()
 
-    # ✅ 체크박스 위젯 상태가 있으면 이를 최우선으로 사용한다.
-    # - 로그아웃 시점에는 로그인 폼이 화면에 없어 remember_*_pref가 오래된 값일 수 있다.
-    # - 새 세션 기본값(False)로 잘못 덮어써지는 문제를 막기 위해 기존 저장값을 마지막 fallback으로 둔다.
-    keep_name = bool(st.session_state.get("remember_name_check", st.session_state.get("remember_name_pref", default_keep_name)))
-    keep_pin = bool(st.session_state.get("remember_pin_check", st.session_state.get("remember_pin_pref", default_keep_pin)))
+    keep_login = bool(st.session_state.get("remember_login_check", st.session_state.get("remember_login_pref", default_keep_login)))
 
     current_name = str(st.session_state.get("login_name", "") or "").strip()
     current_pin = str(st.session_state.get("login_pin", "") or "").strip()
-    if keep_name and not current_name:
+    if keep_login and not current_name:
         current_name = str(default_saved_name or "").strip()
-    if keep_pin and not current_pin:
+    if keep_login and not current_pin:
         current_pin = str(default_saved_pin or "").strip()
 
-    st.session_state.remember_name_pref = bool(keep_name)
-    st.session_state.remember_pin_pref = bool(keep_pin)
-    st.session_state.remember_name_check = bool(keep_name)
-    st.session_state.remember_pin_check = bool(keep_pin)
+    st.session_state.remember_login_pref = bool(keep_login)
+    st.session_state.remember_login_check = bool(keep_login)
 
-    st.query_params["remember_name"] = "1" if keep_name else "0"
-    st.query_params["remember_pin"] = "1" if keep_pin else "0"
-    st.query_params["saved_name"] = current_name if keep_name else ""
-    st.query_params["saved_pin"] = current_pin if keep_pin else ""
-    
-    # ✅ 로그아웃 직후 로그인 폼 주입 스크립트가 localStorage 기준으로 체크박스를
-    # 다시 토글해버리지 않도록 remember 상태를 함께 동기화한다.
+    st.query_params["remember_login"] = "1" if keep_login else "0"
+    st.query_params["saved_name"] = current_name if keep_login else ""
+    st.query_params["saved_pin"] = current_pin if keep_login else ""
+
     components.html(
         f"""
         <script>
         try {{
-            localStorage.setItem("ce_remember_name", {("'1'" if keep_name else "'0'")});
-            localStorage.setItem("ce_remember_pin", {("'1'" if keep_pin else "'0'")});
+            localStorage.setItem("ce_remember_login", {("'1'" if keep_login else "'0'")});
 
-            // ✅ 로그아웃 시점에도 remember 상태에 맞춰 저장된 입력값을 동기화한다.
-            // (브라우저 재시작 후 체크만 남고 입력값이 비는 현상 방지)
             const currentName = {current_name!r};
             const currentPin = {current_pin!r};
-            if ({str(keep_name).lower()}) localStorage.setItem("ce_saved_name", currentName);
-            else localStorage.removeItem("ce_saved_name");
-
-            if ({str(keep_pin).lower()}) localStorage.setItem("ce_saved_pin", currentPin);
-            else localStorage.removeItem("ce_saved_pin");
+            if ({str(keep_login).lower()}) {{
+                localStorage.setItem("ce_saved_login_name", currentName);
+                localStorage.setItem("ce_saved_login_pin", currentPin);
+            }} else {{
+                localStorage.removeItem("ce_saved_login_name");
+                localStorage.removeItem("ce_saved_login_pin");
+            }}
         }} catch (e) {{}}
         </script>
         """,
         height=0,
     )
 
-    _sync_login_persistence_cookies(current_name, current_pin, keep_name, keep_pin)
+    _sync_login_persistence_cookies(current_name, current_pin, keep_login)
 
 
 def _persist_login_form_state(name_input: str, pin_input: str):
     """로그인 전 화면에서도 기억하기 체크/입력값을 즉시 URL·쿠키·로컬 상태에 동기화한다."""
-    keep_name = bool(st.session_state.get("remember_name_pref", False))
-    keep_pin = bool(st.session_state.get("remember_pin_pref", False))
+    keep_login = bool(st.session_state.get("remember_login_pref", False))
 
-    existing_saved_name, existing_saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
+    existing_saved_name, existing_saved_pin, default_keep_login = _read_login_persistence_defaults()
     name_input = str(name_input or "").strip()
     pin_input = str(pin_input or "").strip()
 
     qp = st.query_params
-    qp_remember_name = str(qp.get("remember_name", "") or "").strip()
-    qp_remember_pin = str(qp.get("remember_pin", "") or "").strip()
+    qp_remember_login = str(qp.get("remember_login", "") or "").strip()
     qp_saved_name = str(qp.get("saved_name", "") or "").strip()
     qp_saved_pin = str(qp.get("saved_pin", "") or "").strip()
     qp_has_meaningful_remember_state = bool(
         qp_saved_name
         or qp_saved_pin
-        or qp_remember_name == "1"
-        or qp_remember_pin == "1"
+        or qp_remember_login == "1"
     )
     can_hydrate = bool(
         qp_has_meaningful_remember_state
         or existing_saved_name
         or existing_saved_pin
-        or keep_name
-        or keep_pin
+        or keep_login
         or name_input
         or pin_input
     )
@@ -423,34 +373,25 @@ def _persist_login_form_state(name_input: str, pin_input: str):
             return
         st.session_state.login_persistence_hydrated = True
 
-    # ✅ 첫 렌더에서 위젯 기본값(False)이 먼저 들어오며 저장값을 지워버리는 문제 방지
-    # - 쿠키/URL에 기존 remember 상태가 있으면, 사용자가 명시적으로 바꾸기 전까지 보존한다.
-    effective_keep_name = keep_name
-    effective_keep_pin = keep_pin
-    if not keep_name and bool(default_keep_name):
-        effective_keep_name = True
-    if not keep_pin and bool(default_keep_pin):
-        effective_keep_pin = True
+    effective_keep_login = keep_login
+    if not keep_login and bool(default_keep_login):
+        effective_keep_login = True
 
-    st.session_state.remember_name_pref = bool(effective_keep_name)
-    st.session_state.remember_pin_pref = bool(effective_keep_pin)
+    st.session_state.remember_login_pref = bool(effective_keep_login)
 
-    # ✅ 로딩 타이밍으로 입력란이 잠깐 비어 있는 렌더에서도 기존 기억값을 덮어지우지 않게 보호
     effective_saved_name = name_input if name_input else str(existing_saved_name or "")
     effective_saved_pin = pin_input if pin_input else str(existing_saved_pin or "")
 
-    qp["remember_name"] = "1" if effective_keep_name else "0"
-    qp["remember_pin"] = "1" if effective_keep_pin else "0"
-    qp["saved_name"] = effective_saved_name if effective_keep_name else ""
-    qp["saved_pin"] = effective_saved_pin if effective_keep_pin else ""
+    qp["remember_login"] = "1" if effective_keep_login else "0"
+    qp["saved_name"] = effective_saved_name if effective_keep_login else ""
+    qp["saved_pin"] = effective_saved_pin if effective_keep_login else ""
 
     _sync_login_persistence_cookies(
         effective_saved_name,
         effective_saved_pin,
-        effective_keep_name,
-        effective_keep_pin,
+        effective_keep_login,
     )
-    
+
 
 def _hydrate_login_state_from_local_storage_via_query_params():
     """브라우저 localStorage 값을 URL 쿼리로 동기화해 서버에서도 즉시 복원 가능하게 한다."""
@@ -479,14 +420,12 @@ def _hydrate_login_state_from_local_storage_via_query_params():
                 }
             };
 
-            const rememberName = read("ce_remember_name") === "1";
-            const rememberPin = read("ce_remember_pin") === "1";
-            const savedName = rememberName ? read("ce_saved_name") : "";
-            const savedPin = rememberPin ? read("ce_saved_pin") : "";
-            const hasRememberName = hasKey("ce_remember_name");
-            const hasRememberPin = hasKey("ce_remember_pin");
-            const hasSavedName = hasKey("ce_saved_name");
-            const hasSavedPin = hasKey("ce_saved_pin");
+            const rememberLogin = read("ce_remember_login") === "1";
+            const savedName = rememberLogin ? read("ce_saved_login_name") : "";
+            const savedPin = rememberLogin ? read("ce_saved_login_pin") : "";
+            const hasRememberLogin = hasKey("ce_remember_login");
+            const hasSavedName = hasKey("ce_saved_login_name");
+            const hasSavedPin = hasKey("ce_saved_login_pin");
 
             const url = new URL(window.parent?.location?.href || window.location.href);
             const p = url.searchParams;
@@ -500,24 +439,13 @@ def _hydrate_login_state_from_local_storage_via_query_params():
                 changed = true;
             };
 
-            // localStorage 키가 실제로 존재할 때만 URL 값을 덮어써서,
-            // 브라우저 정책/초기 로딩 타이밍으로 localStorage 읽기가 비었을 때
-            // 기존 기억값을 0/빈값으로 잘못 초기화하지 않도록 보호한다.
-            // ✅ remember 플래그는 URL에 명시값(0/1)이 있으면 URL을 우선한다.
-            // - 로그아웃 직후 서버가 갱신한 URL값이 있는데도,
-            //   localStorage의 오래된 값(예: 0)으로 체크가 풀리는 현상을 방지.
-            // - URL값이 비어 있을 때만 localStorage 값으로 보강한다.
-            const urlRememberName = String(p.get("remember_name") || "").trim();
-            const urlRememberPin = String(p.get("remember_pin") || "").trim();
+            const urlRememberLogin = String(p.get("remember_login") || "").trim();
 
-            if (hasRememberName && !["0", "1"].includes(urlRememberName)) {
-                setParamFromLocal("remember_name", rememberName ? "1" : "0");
+            if (hasRememberLogin && !["0", "1"].includes(urlRememberLogin)) {
+                setParamFromLocal("remember_login", rememberLogin ? "1" : "0");
             }
-            if (hasRememberPin && !["0", "1"].includes(urlRememberPin)) {
-                setParamFromLocal("remember_pin", rememberPin ? "1" : "0");
-            }
-            if (hasSavedName || !rememberName) setParamFromLocal("saved_name", savedName, hasSavedName);
-            if (hasSavedPin || !rememberPin) setParamFromLocal("saved_pin", savedPin, hasSavedPin);
+            if (hasSavedName || !rememberLogin) setParamFromLocal("saved_name", savedName, hasSavedName);
+            if (hasSavedPin || !rememberLogin) setParamFromLocal("saved_pin", savedPin, hasSavedPin);
 
             if (changed) {
                 url.search = p.toString();
@@ -531,7 +459,7 @@ def _hydrate_login_state_from_local_storage_via_query_params():
         height=0,
     )
 
-    
+
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
 # =========================
@@ -5171,15 +5099,10 @@ if not st.session_state.logged_in:
                 key="login_pin_input",
                 value=str(st.session_state.get("login_pin_input", "") or ""),
             ).strip()
-        remember_c1, remember_c2 = st.columns(2)
-        with remember_c1:
-            remember_name_widget = st.checkbox("아이디 기억하기", key="remember_name_check")
-        with remember_c2:
-            remember_pin_widget = st.checkbox("비밀번호 기억하기", key="remember_pin_check")
+        remember_login_widget = st.checkbox("로그인정보 기억하기", key="remember_login_check")
         login_btn = st.form_submit_button("로그인", use_container_width=True)
 
-    st.session_state.remember_name_pref = bool(remember_name_widget)
-    st.session_state.remember_pin_pref = bool(remember_pin_widget)
+    st.session_state.remember_login_pref = bool(remember_login_widget)
 
     _persist_login_form_state(login_name, login_pin)
 
@@ -6774,4 +6697,3 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
-
