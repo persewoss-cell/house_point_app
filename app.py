@@ -59,6 +59,7 @@ st.session_state.setdefault("remember_name_check", False)
 st.session_state.setdefault("remember_pin_check", False)
 st.session_state.setdefault("remember_name_pref", False)
 st.session_state.setdefault("remember_pin_pref", False)
+st.session_state.setdefault("login_persistence_hydrated", False)
 
 
 def _read_persisted_login_from_cookies():
@@ -134,19 +135,20 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
             }} catch (e) {{}}
             return out;
         }})();
+        const storage = (() => {{
+            try {{
+                if (window.parent && window.parent.localStorage) return window.parent.localStorage;
+            }} catch (e) {{}}
+            try {{ return window.localStorage; }} catch (e) {{ return null; }}
+        }})();
         const localRead = (key) => {{
-            try {{ return localStorage.getItem(key) || ""; }} catch (e) {{ return ""; }}
+            try {{ return storage ? (storage.getItem(key) || "") : ""; }} catch (e) {{ return ""; }}
         }};
         const localWrite = (key, value) => {{
-            try {{ localStorage.setItem(key, String(value)); }} catch (e) {{}}
+            try {{ if (storage) storage.setItem(key, String(value)); }} catch (e) {{}}
         }};
         const localRemove = (key) => {{
-            try {{ localStorage.removeItem(key); }} catch (e) {{}}
-        }};
-        const remove = (key) => {{
-            docs.forEach((d) => {{
-                d.cookie = `${{key}}=; Max-Age=0; Path=/; SameSite=Lax`;
-            }});
+            try {{ if (storage) storage.removeItem(key); }} catch (e) {{}}
         }};
         const write = (key, value) => {{
             docs.forEach((d) => {{
@@ -434,14 +436,30 @@ def _persist_login_form_state(name_input: str, pin_input: str):
     name_input = str(name_input or "").strip()
     pin_input = str(pin_input or "").strip()
 
+    qp = st.query_params
+    qp_has_remember_state = any(k in qp for k in ("remember_name", "remember_pin", "saved_name", "saved_pin"))
+    can_hydrate = bool(
+        qp_has_remember_state
+        or existing_saved_name
+        or existing_saved_pin
+        or keep_name
+        or keep_pin
+        or name_input
+        or pin_input
+    )
+    if not st.session_state.get("login_persistence_hydrated", False):
+        if not can_hydrate:
+            return
+        st.session_state.login_persistence_hydrated = True
+
     # ✅ 로딩 타이밍으로 입력란이 잠깐 비어 있는 렌더에서도 기존 기억값을 덮어지우지 않게 보호
     effective_saved_name = name_input if name_input else str(existing_saved_name or "")
     effective_saved_pin = pin_input if pin_input else str(existing_saved_pin or "")
 
-    st.query_params["remember_name"] = "1" if keep_name else "0"
-    st.query_params["remember_pin"] = "1" if keep_pin else "0"
-    st.query_params["saved_name"] = effective_saved_name if keep_name else ""
-    st.query_params["saved_pin"] = effective_saved_pin if keep_pin else ""
+    qp["remember_name"] = "1" if keep_name else "0"
+    qp["remember_pin"] = "1" if keep_pin else "0"
+    qp["saved_name"] = effective_saved_name if keep_name else ""
+    qp["saved_pin"] = effective_saved_pin if keep_pin else ""
 
     _sync_login_persistence_cookies(
         effective_saved_name,
@@ -457,8 +475,15 @@ def _hydrate_login_state_from_local_storage_via_query_params():
         """
         <script>
         (() => {
+            const storage = (() => {
+                try {
+                    if (window.parent && window.parent.localStorage) return window.parent.localStorage;
+                } catch (e) {}
+                try { return window.localStorage; } catch (e) { return null; }
+            })();
+
             const read = (k) => {
-                try { return String(localStorage.getItem(k) || "").trim(); }
+                try { return String(storage ? (storage.getItem(k) || "") : "").trim(); }
                 catch (e) { return ""; }
             };
 
@@ -6733,6 +6758,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
