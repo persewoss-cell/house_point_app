@@ -218,6 +218,9 @@ def _inject_login_prefill_from_local_storage():
         const read = (key) => {
             try { return String(localStorage.getItem(key) || "").trim(); } catch (e) { return ""; }
         };
+        const hasKey = (key) => {
+            try { return localStorage.getItem(key) !== null; } catch (e) { return false; }
+        };
 
         const url = new URL(window.parent?.location?.href || window.location.href);
         const qpRememberName = String(url.searchParams.get("remember_name") || "").trim();
@@ -225,12 +228,12 @@ def _inject_login_prefill_from_local_storage():
         const qpSavedName = String(url.searchParams.get("saved_name") || "").trim();
         const qpSavedPin = String(url.searchParams.get("saved_pin") || "").trim();
 
-        const rememberName = (qpRememberName === "0" || qpRememberName === "1")
-            ? qpRememberName === "1"
-            : read("ce_remember_name") === "1";
-        const rememberPin = (qpRememberPin === "0" || qpRememberPin === "1")
-            ? qpRememberPin === "1"
-            : read("ce_remember_pin") === "1";
+        const rememberName = hasKey("ce_remember_name")
+            ? read("ce_remember_name") === "1"
+            : (qpRememberName === "1");
+        const rememberPin = hasKey("ce_remember_pin")
+            ? read("ce_remember_pin") === "1"
+            : (qpRememberPin === "1");
         const savedName = rememberName ? (qpSavedName || read("ce_saved_name")) : "";
         const savedPin = rememberPin ? (qpSavedPin || read("ce_saved_pin")) : "";
 
@@ -456,9 +459,18 @@ def _persist_login_form_state(name_input: str, pin_input: str):
     pin_input = str(pin_input or "").strip()
 
     qp = st.query_params
-    qp_has_remember_state = any(k in qp for k in ("remember_name", "remember_pin", "saved_name", "saved_pin"))
+    qp_remember_name = str(qp.get("remember_name", "") or "").strip()
+    qp_remember_pin = str(qp.get("remember_pin", "") or "").strip()
+    qp_saved_name = str(qp.get("saved_name", "") or "").strip()
+    qp_saved_pin = str(qp.get("saved_pin", "") or "").strip()
+    qp_has_meaningful_remember_state = bool(
+        qp_saved_name
+        or qp_saved_pin
+        or qp_remember_name == "1"
+        or qp_remember_pin == "1"
+    )
     can_hydrate = bool(
-        qp_has_remember_state
+        qp_has_meaningful_remember_state
         or existing_saved_name
         or existing_saved_pin
         or keep_name
@@ -6805,6 +6817,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
