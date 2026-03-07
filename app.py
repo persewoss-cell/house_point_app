@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import io
 import random
@@ -54,6 +55,133 @@ st.session_state.setdefault("auction_result_visible", False)
 st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
 
+def _inject_login_prefill_from_local_storage():
+    """로컬 스토리지에 저장된 로그인 입력값/체크값을 로그인 폼에 주입한다."""
+    components.html(
+        """
+        <script>
+        const read = (key) => {
+            try { return String(localStorage.getItem(key) || "").trim(); } catch (e) { return ""; }
+        };
+
+        const savedName = read("ce_saved_name");
+        const savedPin = read("ce_saved_pin");
+        const rememberName = read("ce_remember_name") === "1";
+        const rememberPin = read("ce_remember_pin") === "1";
+
+        const setNativeValue = (el, value) => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (!setter || !el) return;
+            setter.call(el, value);
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        const clickCheckboxIfNeeded = (el, shouldBeChecked) => {
+            if (!el) return;
+            if (Boolean(el.checked) !== Boolean(shouldBeChecked)) {
+                el.click();
+            }
+        };
+
+        const findCheckboxByLabel = (root, labelText) => {
+            const rows = Array.from(root.querySelectorAll("div[data-testid='stCheckbox']"));
+            const hit = rows.find((row) => {
+                const label = row.querySelector("label")?.innerText || "";
+                return label.includes(labelText);
+            });
+            return hit?.querySelector("input[type='checkbox']") || null;
+        };
+
+        const tryFill = () => {
+            const root = window.parent?.document || document;
+            const nameInput = root.querySelector('input[aria-label="이름"]')
+                || root.querySelector('input[type="text"]');
+            const pinInput = root.querySelector('input[aria-label="비밀번호"]')
+                || root.querySelector('input[type="password"]');
+
+            if (savedName && nameInput && !String(nameInput.value || "").trim()) {
+                setNativeValue(nameInput, savedName);
+            }
+            if (savedPin && pinInput && !String(pinInput.value || "").trim()) {
+                setNativeValue(pinInput, savedPin);
+            }
+
+            const rememberNameCheckbox = findCheckboxByLabel(root, "아이디 기억하기");
+            const rememberPinCheckbox = findCheckboxByLabel(root, "비밀번호 기억하기");
+            clickCheckboxIfNeeded(rememberNameCheckbox, rememberName);
+            clickCheckboxIfNeeded(rememberPinCheckbox, rememberPin);
+        };
+
+        tryFill();
+        setTimeout(tryFill, 120);
+        setTimeout(tryFill, 420);
+        </script>
+        """,
+        height=0,
+    )
+
+
+def _persist_login_inputs(name: str, pin: str):
+    """로그인 성공 시 remember 옵션 및 로그인 유지 정보를 저장한다."""
+    keep_name = bool(st.session_state.get("remember_name_check", False))
+    keep_pin = bool(st.session_state.get("remember_pin_check", False))
+
+    st.query_params["login_keep"] = "1"
+    st.query_params["login_name"] = str(name or "")
+    st.query_params["login_pin"] = str(pin or "")
+
+    components.html(
+        f"""
+        <script>
+        try {{
+            const keepName = {str(keep_name).lower()};
+            const keepPin = {str(keep_pin).lower()};
+            const name = {name!r};
+            const pin = {pin!r};
+
+            localStorage.setItem("ce_remember_name", keepName ? "1" : "0");
+            localStorage.setItem("ce_remember_pin", keepPin ? "1" : "0");
+            if (keepName) localStorage.setItem("ce_saved_name", name);
+            else localStorage.removeItem("ce_saved_name");
+
+            if (keepPin) localStorage.setItem("ce_saved_pin", pin);
+            else localStorage.removeItem("ce_saved_pin");
+        }} catch (e) {{}}
+        </script>
+        """,
+        height=0,
+    )
+
+
+def _restore_login_from_query_params():
+    """F5/새로고침 시 URL 쿼리파라미터 기반으로 로그인 상태를 복원한다."""
+    if st.session_state.get("logged_in", False):
+        return
+
+    qp = st.query_params
+    if str(qp.get("login_keep", "")) != "1":
+        return
+
+    login_name = str(qp.get("login_name", "") or "").strip()
+    login_pin = str(qp.get("login_pin", "") or "").strip()
+    if not login_name or not pin_ok(login_pin):
+        return
+
+    if is_admin_login(login_name, login_pin):
+        st.session_state.admin_ok = True
+        st.session_state.logged_in = True
+        st.session_state.login_name = ADMIN_NAME
+        st.session_state.login_pin = ADMIN_PIN
+        return
+
+    doc = fs_auth_student(login_name, login_pin)
+    if doc:
+        st.session_state.admin_ok = False
+        st.session_state.logged_in = True
+        st.session_state.login_name = login_name
+        st.session_state.login_pin = login_pin
+        
 
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
@@ -4663,6 +4791,8 @@ with st.sidebar:
                     st.error(res.get("error", "PIN 변경 실패"))
 
 
+_restore_login_from_query_params()
+
 # =========================
 # Main: 로그인
 # =========================
@@ -4680,8 +4810,15 @@ if not st.session_state.logged_in:
             login_name = st.text_input("이름", key="login_name_input").strip()
         with login_c2:
             login_pin = st.text_input("비밀번호(4자리)", type="password", key="login_pin_input").strip()
+        remember_c1, remember_c2 = st.columns(2)
+        with remember_c1:
+            st.checkbox("아이디 기억하기", key="remember_name_check")
+        with remember_c2:
+            st.checkbox("비밀번호 기억하기", key="remember_pin_check")
         with login_c3:
             login_btn = st.form_submit_button("로그인", use_container_width=True)
+
+    _inject_login_prefill_from_local_storage()
 
     if login_btn:
         if not login_name:
@@ -4694,6 +4831,7 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.login_name = ADMIN_NAME
                 st.session_state.login_pin = ADMIN_PIN
+                _persist_login_inputs(login_name, login_pin)
 
                 toast("관리자 모드 ON", icon="🔓")
                 st.rerun()
@@ -4707,6 +4845,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.login_name = login_name
                     st.session_state.login_pin = login_pin
+                    _persist_login_inputs(login_name, login_pin)
 
                     toast("로그인 완료!", icon="✅")
                     st.rerun()
@@ -4721,6 +4860,9 @@ else:
         st.session_state.tpl_sort_mode = False
         st.session_state.tpl_work_ids = []
         st.session_state.tpl_sort_panel_open = False
+        st.query_params.pop("login_keep", None)
+        st.query_params.pop("login_name", None)
+        st.query_params.pop("login_pin", None)
         st.rerun()
 
 if not st.session_state.logged_in:
@@ -6309,6 +6451,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
