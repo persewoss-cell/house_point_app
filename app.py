@@ -347,6 +347,14 @@ def _restore_login_from_query_params():
     if st.session_state.get("logged_in", False):
         return
 
+    # ✅ 자동 로그인 복원 경로에서도 remember 상태를 먼저 동기화해
+    # 로그아웃 시 체크 상태/저장값이 false로 덮어써지는 것을 방지한다.
+    _, _, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
+    st.session_state.remember_name_pref = bool(default_keep_name)
+    st.session_state.remember_pin_pref = bool(default_keep_pin)
+    st.session_state.remember_name_check = bool(default_keep_name)
+    st.session_state.remember_pin_check = bool(default_keep_pin)
+
     qp = st.query_params
     if str(qp.get("login_keep", "")) != "1":
         return
@@ -413,14 +421,32 @@ def _restore_remember_flags_from_query_params():
 
 def _persist_remember_flags_to_query_params():
     """로그인 상태와 무관하게 기억하기 체크 상태를 URL/로컬스토리지에 반영한다."""
-    keep_name = bool(st.session_state.get("remember_name_pref", False))
-    keep_pin = bool(st.session_state.get("remember_pin_pref", False))
-    current_name = str(st.session_state.get("login_name", "") or "")
-    current_pin = str(st.session_state.get("login_pin", "") or "")
+    default_saved_name, default_saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
+
+    # ✅ 로그인 화면의 체크박스가 아직 렌더되지 않았거나(자동 로그인 등)
+    # session_state 기본값(False)만 있는 경우, 기존 remember 설정을 우선 보존한다.
+    keep_name = bool(st.session_state.get("remember_name_pref", default_keep_name))
+    keep_pin = bool(st.session_state.get("remember_pin_pref", default_keep_pin))
+    if "remember_name_pref" not in st.session_state:
+        keep_name = bool(default_keep_name)
+    if "remember_pin_pref" not in st.session_state:
+        keep_pin = bool(default_keep_pin)
+
+    current_name = str(st.session_state.get("login_name", "") or "").strip()
+    current_pin = str(st.session_state.get("login_pin", "") or "").strip()
+    if keep_name and not current_name:
+        current_name = str(default_saved_name or "").strip()
+    if keep_pin and not current_pin:
+        current_pin = str(default_saved_pin or "").strip()
+
+    st.session_state.remember_name_pref = bool(keep_name)
+    st.session_state.remember_pin_pref = bool(keep_pin)
+    st.session_state.remember_name_check = bool(keep_name)
+    st.session_state.remember_pin_check = bool(keep_pin)
+
     st.query_params["remember_name"] = "1" if keep_name else "0"
     st.query_params["remember_pin"] = "1" if keep_pin else "0"
     st.query_params["saved_name"] = current_name if keep_name else ""
-    st.query_params["saved_pin"] = current_pin if keep_pin else ""
     
     # ✅ 로그아웃 직후 로그인 폼 주입 스크립트가 localStorage 기준으로 체크박스를
     # 다시 토글해버리지 않도록 remember 상태를 함께 동기화한다.
@@ -6826,6 +6852,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
