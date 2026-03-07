@@ -437,7 +437,7 @@ def _persist_login_form_state(name_input: str, pin_input: str):
     keep_name = bool(st.session_state.get("remember_name_pref", False))
     keep_pin = bool(st.session_state.get("remember_pin_pref", False))
 
-    existing_saved_name, existing_saved_pin, _, _ = _read_login_persistence_defaults()
+    existing_saved_name, existing_saved_pin, default_keep_name, default_keep_pin = _read_login_persistence_defaults()
     name_input = str(name_input or "").strip()
     pin_input = str(pin_input or "").strip()
 
@@ -457,20 +457,34 @@ def _persist_login_form_state(name_input: str, pin_input: str):
             return
         st.session_state.login_persistence_hydrated = True
 
+    # ✅ 첫 렌더에서 위젯 기본값(False)이 먼저 들어오며 저장값을 지워버리는 문제 방지
+    # - 쿠키/URL에 기존 remember 상태가 있으면, 사용자가 명시적으로 바꾸기 전까지 보존한다.
+    effective_keep_name = keep_name
+    effective_keep_pin = keep_pin
+    if not keep_name and bool(default_keep_name):
+        effective_keep_name = True
+    if not keep_pin and bool(default_keep_pin):
+        effective_keep_pin = True
+
+    st.session_state.remember_name_pref = bool(effective_keep_name)
+    st.session_state.remember_pin_pref = bool(effective_keep_pin)
+    st.session_state.remember_name_check = bool(effective_keep_name)
+    st.session_state.remember_pin_check = bool(effective_keep_pin)
+
     # ✅ 로딩 타이밍으로 입력란이 잠깐 비어 있는 렌더에서도 기존 기억값을 덮어지우지 않게 보호
     effective_saved_name = name_input if name_input else str(existing_saved_name or "")
     effective_saved_pin = pin_input if pin_input else str(existing_saved_pin or "")
 
-    qp["remember_name"] = "1" if keep_name else "0"
-    qp["remember_pin"] = "1" if keep_pin else "0"
-    qp["saved_name"] = effective_saved_name if keep_name else ""
-    qp["saved_pin"] = effective_saved_pin if keep_pin else ""
+    qp["remember_name"] = "1" if effective_keep_name else "0"
+    qp["remember_pin"] = "1" if effective_keep_pin else "0"
+    qp["saved_name"] = effective_saved_name if effective_keep_name else ""
+    qp["saved_pin"] = effective_saved_pin if effective_keep_pin else ""
 
     _sync_login_persistence_cookies(
         effective_saved_name,
         effective_saved_pin,
-        keep_name,
-        keep_pin,
+        effective_keep_name,
+        effective_keep_pin,
     )
     
 
@@ -6779,6 +6793,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
