@@ -93,11 +93,24 @@ def _inject_login_prefill_from_local_storage():
             return hit?.querySelector("input[type='checkbox']") || null;
         };
 
+        const findInputByLabelText = (root, labelText) => {
+            const labels = Array.from(root.querySelectorAll("label"));
+            const hit = labels.find((label) => {
+                const t = String(label.innerText || "").trim();
+                return t.includes(labelText);
+            });
+            if (!hit) return null;
+            const wrapper = hit.closest("div[data-testid='stTextInput']") || hit.parentElement;
+            return wrapper?.querySelector("input") || null;
+        };
+
         const tryFill = () => {
             const root = window.parent?.document || document;
-            const nameInput = root.querySelector('input[aria-label="이름"]')
+            const nameInput = findInputByLabelText(root, "이름")
+                || root.querySelector('input[aria-label="이름"]')
                 || root.querySelector('input[type="text"]');
-            const pinInput = root.querySelector('input[aria-label="비밀번호"]')
+            const pinInput = findInputByLabelText(root, "비밀번호")
+                || root.querySelector('input[aria-label*="비밀번호"]')
                 || root.querySelector('input[type="password"]');
 
             if (savedName && nameInput && !String(nameInput.value || "").trim()) {
@@ -116,6 +129,7 @@ def _inject_login_prefill_from_local_storage():
         tryFill();
         setTimeout(tryFill, 120);
         setTimeout(tryFill, 420);
+        setTimeout(tryFill, 900);
         </script>
         """,
         height=0,
@@ -4805,7 +4819,7 @@ else:
 if not st.session_state.logged_in:
     # ✅ Enter로 로그인 제출 가능하도록 form 사용
     with st.form("login_form", clear_on_submit=False):
-        login_c1, login_c2, login_c3 = st.columns([2, 2, 1])
+        login_c1, login_c2 = st.columns(2)
         with login_c1:
             login_name = st.text_input("이름", key="login_name_input").strip()
         with login_c2:
@@ -4815,8 +4829,7 @@ if not st.session_state.logged_in:
             st.checkbox("아이디 기억하기", key="remember_name_check")
         with remember_c2:
             st.checkbox("비밀번호 기억하기", key="remember_pin_check")
-        with login_c3:
-            login_btn = st.form_submit_button("로그인", use_container_width=True)
+        login_btn = st.form_submit_button("로그인", use_container_width=True)
 
     _inject_login_prefill_from_local_storage()
 
@@ -6451,6 +6464,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
