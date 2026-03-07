@@ -150,6 +150,11 @@ def _sync_login_persistence_cookies(name: str, pin: str, remember_name: bool, re
         const localRemove = (key) => {{
             try {{ if (storage) storage.removeItem(key); }} catch (e) {{}}
         }};
+        const remove = (key) => {{
+            docs.forEach((d) => {{
+                d.cookie = `${{key}}=; Max-Age=0; Path=/; SameSite=Lax`;
+            }});
+        }};
         const write = (key, value) => {{
             docs.forEach((d) => {{
                 d.cookie = `${{key}}=${{encodeURIComponent(value)}}; Max-Age=${{maxAge}}; Path=/; SameSite=Lax`;
@@ -487,10 +492,23 @@ def _hydrate_login_state_from_local_storage_via_query_params():
                 catch (e) { return ""; }
             };
 
+            const hasKey = (k) => {
+                try {
+                    if (!storage) return false;
+                    return storage.getItem(k) !== null;
+                } catch (e) {
+                    return false;
+                }
+            };
+
             const rememberName = read("ce_remember_name") === "1";
             const rememberPin = read("ce_remember_pin") === "1";
             const savedName = rememberName ? read("ce_saved_name") : "";
             const savedPin = rememberPin ? read("ce_saved_pin") : "";
+            const hasRememberName = hasKey("ce_remember_name");
+            const hasRememberPin = hasKey("ce_remember_pin");
+            const hasSavedName = hasKey("ce_saved_name");
+            const hasSavedPin = hasKey("ce_saved_pin");
 
             const url = new URL(window.parent?.location?.href || window.location.href);
             const p = url.searchParams;
@@ -503,10 +521,13 @@ def _hydrate_login_state_from_local_storage_via_query_params():
                 changed = true;
             };
 
-            setParam("remember_name", rememberName ? "1" : "0");
-            setParam("remember_pin", rememberPin ? "1" : "0");
-            setParam("saved_name", savedName);
-            setParam("saved_pin", savedPin);
+            // localStorage 키가 실제로 존재할 때만 URL 값을 덮어써서,
+            // 브라우저 정책/초기 로딩 타이밍으로 localStorage 읽기가 비었을 때
+            // 기존 기억값을 0/빈값으로 잘못 초기화하지 않도록 보호한다.
+            if (hasRememberName) setParam("remember_name", rememberName ? "1" : "0");
+            if (hasRememberPin) setParam("remember_pin", rememberPin ? "1" : "0");
+            if (hasSavedName || !rememberName) setParam("saved_name", savedName);
+            if (hasSavedPin || !rememberPin) setParam("saved_pin", savedPin);
 
             if (changed) {
                 url.search = p.toString();
@@ -6758,6 +6779,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
