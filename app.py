@@ -101,12 +101,21 @@ def _read_login_persistence_defaults():
     except Exception:
         pass
 
+    # remember 플래그가 누락됐더라도 저장된 이름/PIN이 있으면 기억하기를 복원한다.
+    if not remember_login and (str(saved_name).strip() or str(saved_pin).strip()):
+        remember_login = True
+
     return saved_name, saved_pin, remember_login
 
 
 def _is_remember_login_locked(default_keep_login: bool = False, saved_name: str = "", saved_pin: str = "") -> bool:
-    """로그인정보 기억하기 잠금 상태를 계산한다."""
-    return bool(st.session_state.get("remember_login_locked", False))
+    """한 번 켠 로그인정보 기억하기를 해제되지 않도록 잠금 상태를 계산한다."""
+    return bool(
+        st.session_state.get("remember_login_locked", False)
+        or default_keep_login
+        or str(saved_name or "").strip()
+        or str(saved_pin or "").strip()
+    )
 
 
 def _apply_remember_login_lock(
@@ -115,8 +124,10 @@ def _apply_remember_login_lock(
     saved_name: str = "",
     saved_pin: str = "",
 ) -> bool:
-    """잠금 상태가 아닐 때는 체크박스 선택값을 그대로 반영한다."""
+    """잠금 조건이 있으면 기억하기 체크를 강제로 유지한다."""
     locked = _is_remember_login_locked(default_keep_login, saved_name, saved_pin)
+    if keep_login:
+        locked = True
     st.session_state.remember_login_locked = bool(locked)
     return bool(keep_login or locked)
 
@@ -6949,7 +6960,6 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
-
 
 
 
