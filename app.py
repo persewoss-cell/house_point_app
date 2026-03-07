@@ -459,6 +459,100 @@ def _persist_login_form_state(name_input: str, pin_input: str):
     )
 
 
+def _hydrate_login_form_dom_from_storage():
+    """브라우저 재시작 후에도 로그인 폼 입력/체크 상태를 DOM에 즉시 복원한다."""
+    components.html(
+        """
+        <script>
+        (() => {
+            const readCookie = (key) => {
+                const readFrom = (d) => {
+                    try {
+                        const raw = String(d?.cookie || "");
+                        if (!raw) return "";
+                        const hit = raw
+                            .split(";")
+                            .map((v) => v.trim())
+                            .find((v) => v.startsWith(`${key}=`));
+                        if (!hit) return "";
+                        return decodeURIComponent(hit.slice(key.length + 1) || "").trim();
+                    } catch (e) {
+                        return "";
+                    }
+                };
+                const own = readFrom(document);
+                if (own) return own;
+                try {
+                    if (window.parent && window.parent.document && window.parent.document !== document) {
+                        return readFrom(window.parent.document);
+                    }
+                } catch (e) {}
+                return "";
+            };
+
+            const storage = (() => {
+                try {
+                    if (window.parent && window.parent.localStorage) return window.parent.localStorage;
+                } catch (e) {}
+                try { return window.localStorage; } catch (e) { return null; }
+            })();
+
+            const readLocal = (k) => {
+                try { return String(storage ? (storage.getItem(k) || "") : "").trim(); }
+                catch (e) { return ""; }
+            };
+
+            const savedName = readLocal("ce_saved_login_name") || readCookie("ce_saved_login_name");
+            const savedPin = readLocal("ce_saved_login_pin") || readCookie("ce_saved_login_pin");
+            const rememberFromLocal = readLocal("ce_remember_login") === "1";
+            const rememberFromCookie = readCookie("ce_remember_login") === "1";
+            const shouldRemember = rememberFromLocal || rememberFromCookie || Boolean(savedName || savedPin);
+
+            const rootDoc = (() => {
+                try {
+                    if (window.parent && window.parent.document) return window.parent.document;
+                } catch (e) {}
+                return document;
+            })();
+
+            const findTextInput = (labelText, isPassword = false) => {
+                const labels = Array.from(rootDoc.querySelectorAll('[data-testid="stWidgetLabel"]'));
+                const label = labels.find((el) => String(el.textContent || "").trim() === labelText);
+                if (!label) return null;
+                const block = label.closest('[data-testid="stTextInput"]');
+                if (!block) return null;
+                const input = block.querySelector('input');
+                if (!input) return null;
+                if (isPassword && input.type !== "password") return null;
+                return input;
+            };
+
+            const setInputValue = (el, value) => {
+                if (!el || !value) return;
+                if (String(el.value || "").trim()) return;
+                el.focus();
+                el.value = value;
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+            };
+
+            setInputValue(findTextInput("이름"), savedName);
+            setInputValue(findTextInput("비밀번호(4자리)", true), savedPin);
+
+            const checkboxLabel = Array.from(rootDoc.querySelectorAll('label')).find((el) =>
+                String(el.textContent || "").includes("로그인정보 기억하기")
+            );
+            const checkbox = checkboxLabel ? checkboxLabel.querySelector('input[type="checkbox"]') : null;
+            if (checkbox && shouldRemember && !checkbox.checked) {
+                checkbox.click();
+            }
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def _hydrate_login_state_from_local_storage_via_query_params():
     """브라우저 저장소(localStorage/cookie) 값을 URL 쿼리로 동기화해 서버에서도 즉시 복원 가능하게 한다."""
     components.html(
@@ -5249,6 +5343,7 @@ if not st.session_state.logged_in:
     st.session_state.remember_login_pref = bool(remember_login_widget)
 
     _persist_login_form_state(login_name, login_pin)
+    _hydrate_login_form_dom_from_storage()
 
     if login_btn:
         if not login_name:
@@ -6840,4 +6935,5 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
