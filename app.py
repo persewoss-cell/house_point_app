@@ -465,6 +465,7 @@ def _hydrate_login_state_from_local_storage_via_query_params():
         """
         <script>
         (() => {
+            const maxAge = 60 * 60 * 24 * 365;
             const storage = (() => {
                 try {
                     if (window.parent && window.parent.localStorage) return window.parent.localStorage;
@@ -518,6 +519,30 @@ def _hydrate_login_state_from_local_storage_via_query_params():
                 return readCookie(key) !== "";
             };
 
+            const writeCookie = (key, value) => {
+                const docs = [document];
+                try {
+                    if (window.parent && window.parent.document && window.parent.document !== document) {
+                        docs.push(window.parent.document);
+                    }
+                } catch (e) {}
+                docs.forEach((d) => {
+                    d.cookie = `${key}=${encodeURIComponent(String(value || ""))}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+                });
+            };
+
+            const removeCookie = (key) => {
+                const docs = [document];
+                try {
+                    if (window.parent && window.parent.document && window.parent.document !== document) {
+                        docs.push(window.parent.document);
+                    }
+                } catch (e) {}
+                docs.forEach((d) => {
+                    d.cookie = `${key}=; Max-Age=0; Path=/; SameSite=Lax`;
+                });
+            };
+
             const localRememberLogin = read("ce_remember_login") === "1";
             const cookieRememberLogin = readCookie("ce_remember_login") === "1";
             const rememberLoginFlag = localRememberLogin || cookieRememberLogin;
@@ -532,6 +557,17 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             const hasRememberLogin = hasKey("ce_remember_login") || hasCookie("ce_remember_login");
             const hasSavedName = hasKey("ce_saved_login_name") || hasCookie("ce_saved_login_name");
             const hasSavedPin = hasKey("ce_saved_login_pin") || hasCookie("ce_saved_login_pin");
+
+            // localStorage에만 있고 쿠키가 비어 있는 경우를 대비해 쿠키를 재동기화한다.
+            if (rememberLogin) {
+                writeCookie("ce_remember_login", "1");
+                writeCookie("ce_saved_login_name", savedName);
+                writeCookie("ce_saved_login_pin", savedPin);
+            } else {
+                removeCookie("ce_remember_login");
+                removeCookie("ce_saved_login_name");
+                removeCookie("ce_saved_login_pin");
+            }
 
             const url = new URL(window.parent?.location?.href || window.location.href);
             const p = url.searchParams;
@@ -6804,3 +6840,4 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
