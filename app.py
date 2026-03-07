@@ -5168,7 +5168,6 @@ if not st.session_state.logged_in:
     remember_locked = bool(st.session_state.get("remember_login_locked", False))
     remember_login_widget = bool(remember_login_widget or remember_locked)
     st.session_state.remember_login_pref = bool(remember_login_widget)
-    st.session_state.remember_login_check = bool(remember_login_widget)
 
     _persist_login_form_state(login_name, login_pin)
 
@@ -6763,6 +6762,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
