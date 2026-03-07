@@ -423,7 +423,33 @@ def _persist_remember_flags_to_query_params():
     )
 
     _sync_login_persistence_cookies(current_name, current_pin, keep_name, keep_pin)
-        
+
+
+def _persist_login_form_state(name_input: str, pin_input: str):
+    """로그인 전 화면에서도 기억하기 체크/입력값을 즉시 URL·쿠키·로컬 상태에 동기화한다."""
+    keep_name = bool(st.session_state.get("remember_name_pref", False))
+    keep_pin = bool(st.session_state.get("remember_pin_pref", False))
+
+    existing_saved_name, existing_saved_pin, _, _ = _read_login_persistence_defaults()
+    name_input = str(name_input or "").strip()
+    pin_input = str(pin_input or "").strip()
+
+    # ✅ 로딩 타이밍으로 입력란이 잠깐 비어 있는 렌더에서도 기존 기억값을 덮어지우지 않게 보호
+    effective_saved_name = name_input if name_input else str(existing_saved_name or "")
+    effective_saved_pin = pin_input if pin_input else str(existing_saved_pin or "")
+
+    st.query_params["remember_name"] = "1" if keep_name else "0"
+    st.query_params["remember_pin"] = "1" if keep_pin else "0"
+    st.query_params["saved_name"] = effective_saved_name if keep_name else ""
+    st.query_params["saved_pin"] = effective_saved_pin if keep_pin else ""
+
+    _sync_login_persistence_cookies(
+        effective_saved_name,
+        effective_saved_pin,
+        keep_name,
+        keep_pin,
+    )
+    
 
 def _hydrate_login_state_from_local_storage_via_query_params():
     """브라우저 localStorage 값을 URL 쿼리로 동기화해 서버에서도 즉시 복원 가능하게 한다."""
@@ -5113,6 +5139,7 @@ if not st.session_state.logged_in:
     st.session_state.remember_name_pref = bool(remember_name_widget)
     st.session_state.remember_pin_pref = bool(remember_pin_widget)
 
+    _persist_login_form_state(login_name, login_pin)
     _inject_login_prefill_from_local_storage()
 
     if login_btn:
@@ -6706,5 +6733,6 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
