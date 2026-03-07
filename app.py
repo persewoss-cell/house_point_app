@@ -54,6 +54,8 @@ st.session_state.setdefault("auction_refund_option", "선택")
 st.session_state.setdefault("auction_result_visible", False)
 st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
+st.session_state.setdefault("remember_name_check", False)
+st.session_state.setdefault("remember_pin_check", False)
 
 def _inject_login_prefill_from_local_storage():
     """로컬 스토리지에 저장된 로그인 입력값/체크값을 로그인 폼에 주입한다."""
@@ -144,6 +146,8 @@ def _persist_login_inputs(name: str, pin: str):
     st.query_params["login_keep"] = "1"
     st.query_params["login_name"] = str(name or "")
     st.query_params["login_pin"] = str(pin or "")
+    st.query_params["remember_name"] = "1" if keep_name else "0"
+    st.query_params["remember_pin"] = "1" if keep_pin else "0"
 
     components.html(
         f"""
@@ -195,6 +199,13 @@ def _restore_login_from_query_params():
         st.session_state.logged_in = True
         st.session_state.login_name = login_name
         st.session_state.login_pin = login_pin
+
+
+def _restore_remember_flags_from_query_params():
+    """로그아웃/새로고침 후에도 기억하기 체크 상태를 유지한다."""
+    qp = st.query_params
+    st.session_state.remember_name_check = str(qp.get("remember_name", "0")) == "1"
+    st.session_state.remember_pin_check = str(qp.get("remember_pin", "0")) == "1"
         
 
 # =========================
@@ -4806,7 +4817,9 @@ with st.sidebar:
 
 
 _restore_login_from_query_params()
-
+if not st.session_state.get("logged_in", False):
+    _restore_remember_flags_from_query_params()
+    
 # =========================
 # Main: 로그인
 # =========================
@@ -6464,6 +6477,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
