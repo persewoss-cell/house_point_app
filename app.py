@@ -68,8 +68,17 @@ def _inject_login_prefill_from_local_storage():
             try { return String(localStorage.getItem(key) || "").trim(); } catch (e) { return ""; }
         };
 
-        const savedName = read("ce_saved_name");
-        const savedPin = read("ce_saved_pin");
+        const readFromQuery = (key) => {
+            try {
+                const usp = new URLSearchParams(window.parent?.location?.search || window.location.search || "");
+                return String(usp.get(key) || "").trim();
+            } catch (e) {
+                return "";
+            }
+        };
+
+        const savedName = read("ce_saved_name") || readFromQuery("login_name");
+        const savedPin = read("ce_saved_pin") || readFromQuery("login_pin");
         const rememberName = read("ce_remember_name") === "1";
         const rememberPin = read("ce_remember_pin") === "1";
 
@@ -79,6 +88,19 @@ def _inject_login_prefill_from_local_storage():
             setter.call(el, value);
             el.dispatchEvent(new Event("input", { bubbles: true }));
             el.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        const persistInputValues = (nameValue, pinValue, rememberNameChecked, rememberPinChecked) => {
+            try {
+                localStorage.setItem("ce_remember_name", rememberNameChecked ? "1" : "0");
+                localStorage.setItem("ce_remember_pin", rememberPinChecked ? "1" : "0");
+
+                if (rememberNameChecked) localStorage.setItem("ce_saved_name", String(nameValue || ""));
+                else localStorage.removeItem("ce_saved_name");
+
+                if (rememberPinChecked) localStorage.setItem("ce_saved_pin", String(pinValue || ""));
+                else localStorage.removeItem("ce_saved_pin");
+            } catch (e) {}
         };
 
         const clickCheckboxIfNeeded = (el, shouldBeChecked) => {
@@ -114,8 +136,38 @@ def _inject_login_prefill_from_local_storage():
                 || null;
         };
 
+        const getRoot = () => {
+            try { return window.parent?.document || document; } catch (e) { return document; }
+        };
+
+        const bindLiveSync = (nameInput, pinInput, rememberNameCheckbox, rememberPinCheckbox) => {
+            if (!nameInput || nameInput.dataset.ceSyncBound === "1") return;
+
+            nameInput.dataset.ceSyncBound = "1";
+            if (pinInput) pinInput.dataset.ceSyncBound = "1";
+            if (rememberNameCheckbox) rememberNameCheckbox.dataset.ceSyncBound = "1";
+            if (rememberPinCheckbox) rememberPinCheckbox.dataset.ceSyncBound = "1";
+
+            const sync = () => {
+                persistInputValues(
+                    nameInput?.value || "",
+                    pinInput?.value || "",
+                    Boolean(rememberNameCheckbox?.checked),
+                    Boolean(rememberPinCheckbox?.checked),
+                );
+            };
+
+            [nameInput, pinInput, rememberNameCheckbox, rememberPinCheckbox].forEach((el) => {
+                if (!el) return;
+                el.addEventListener("input", sync, { passive: true });
+                el.addEventListener("change", sync, { passive: true });
+                el.addEventListener("click", sync, { passive: true });
+            });
+            sync();
+        };
+
         const tryFill = () => {
-            const root = window.parent?.document || document;
+            const root = getRoot();
             const nameInput = findInputByWidgetKey(root, "login_name_input")
                 || findInputByLabelText(root, "이름")
                 || root.querySelector('input[aria-label="이름"]')
@@ -136,6 +188,8 @@ def _inject_login_prefill_from_local_storage():
             const rememberPinCheckbox = findCheckboxByLabel(root, "비밀번호 기억하기");
             clickCheckboxIfNeeded(rememberNameCheckbox, rememberName);
             clickCheckboxIfNeeded(rememberPinCheckbox, rememberPin);
+
+            bindLiveSync(nameInput, pinInput, rememberNameCheckbox, rememberPinCheckbox);
         };
 
         tryFill();
@@ -152,7 +206,7 @@ def _inject_login_prefill_from_local_storage():
             const target = window.parent?.document?.body || document.body;
             observer = new MutationObserver(() => tryFill());
             observer.observe(target, { childList: true, subtree: true });
-            setTimeout(() => observer && observer.disconnect(), 2500);
+            setTimeout(() => observer && observer.disconnect(), 8000);
         } catch (e) {}
         </script>
         """,
@@ -6562,6 +6616,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
