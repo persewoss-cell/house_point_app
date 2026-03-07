@@ -456,7 +456,7 @@ def _persist_login_form_state(name_input: str, pin_input: str):
 
 
 def _hydrate_login_state_from_local_storage_via_query_params():
-    """브라우저 localStorage 값을 URL 쿼리로 동기화해 서버에서도 즉시 복원 가능하게 한다."""
+    """브라우저 저장소(localStorage/cookie) 값을 URL 쿼리로 동기화해 서버에서도 즉시 복원 가능하게 한다."""
     components.html(
         """
         <script>
@@ -482,12 +482,52 @@ def _hydrate_login_state_from_local_storage_via_query_params():
                 }
             };
 
-            const rememberLogin = read("ce_remember_login") === "1";
-            const savedName = rememberLogin ? read("ce_saved_login_name") : "";
-            const savedPin = rememberLogin ? read("ce_saved_login_pin") : "";
-            const hasRememberLogin = hasKey("ce_remember_login");
-            const hasSavedName = hasKey("ce_saved_login_name");
-            const hasSavedPin = hasKey("ce_saved_login_pin");
+            const readCookie = (key) => {
+                const readFrom = (d) => {
+                    try {
+                        const raw = String(d?.cookie || "");
+                        if (!raw) return "";
+                        const hit = raw
+                            .split(";")
+                            .map((v) => v.trim())
+                            .find((v) => v.startsWith(`${key}=`));
+                        if (!hit) return "";
+                        const value = hit.slice(key.length + 1);
+                        return decodeURIComponent(value || "").trim();
+                    } catch (e) {
+                        return "";
+                    }
+                };
+
+                const currentValue = readFrom(document);
+                if (currentValue) return currentValue;
+
+                try {
+                    if (window.parent && window.parent.document && window.parent.document !== document) {
+                        return readFrom(window.parent.document);
+                    }
+                } catch (e) {}
+                return "";
+            };
+
+            const hasCookie = (key) => {
+                return readCookie(key) !== "";
+            };
+
+            const localRememberLogin = read("ce_remember_login") === "1";
+            const cookieRememberLogin = readCookie("ce_remember_login") === "1";
+            const rememberLogin = localRememberLogin || cookieRememberLogin;
+
+            const savedName = rememberLogin
+                ? (read("ce_saved_login_name") || readCookie("ce_saved_login_name"))
+                : "";
+            const savedPin = rememberLogin
+                ? (read("ce_saved_login_pin") || readCookie("ce_saved_login_pin"))
+                : "";
+
+            const hasRememberLogin = hasKey("ce_remember_login") || hasCookie("ce_remember_login");
+            const hasSavedName = hasKey("ce_saved_login_name") || hasCookie("ce_saved_login_name");
+            const hasSavedPin = hasKey("ce_saved_login_pin") || hasCookie("ce_saved_login_pin");
 
             const url = new URL(window.parent?.location?.href || window.location.href);
             const p = url.searchParams;
@@ -6761,6 +6801,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
