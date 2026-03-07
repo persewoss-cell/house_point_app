@@ -93,14 +93,18 @@ def _read_login_persistence_defaults():
         remember_pin = True
 
     try:
+        qp_remember_name = str(st.query_params.get("remember_name", "") or "")
+        qp_remember_pin = str(st.query_params.get("remember_pin", "") or "")        
         qp_saved_name = str(st.query_params.get("saved_name", "") or "")
         qp_saved_pin = str(st.query_params.get("saved_pin", "") or "")
+        if qp_remember_name in {"0", "1"}:
+            remember_name = qp_remember_name == "1"
+        if qp_remember_pin in {"0", "1"}:
+            remember_pin = qp_remember_pin == "1"        
         if qp_saved_name:
             saved_name = qp_saved_name
-            remember_name = bool(str(st.query_params.get("remember_name", "") or "") == "1")
         if qp_saved_pin:
             saved_pin = qp_saved_pin
-            remember_pin = bool(str(st.query_params.get("remember_pin", "") or "") == "1")
     except Exception:
         pass
 
@@ -286,7 +290,9 @@ def _persist_login_inputs(name: str, pin: str):
     st.query_params["login_pin"] = str(pin or "")
     st.query_params["remember_name"] = "1" if keep_name else "0"
     st.query_params["remember_pin"] = "1" if keep_pin else "0"
-
+    st.query_params["saved_name"] = str(name or "") if keep_name else ""
+    st.query_params["saved_pin"] = str(pin or "") if keep_pin else ""
+    
     components.html(
         f"""
         <script>
@@ -389,6 +395,8 @@ def _persist_remember_flags_to_query_params():
     current_pin = str(st.session_state.get("login_pin", "") or "")
     st.query_params["remember_name"] = "1" if keep_name else "0"
     st.query_params["remember_pin"] = "1" if keep_pin else "0"
+    st.query_params["saved_name"] = current_name if keep_name else ""
+    st.query_params["saved_pin"] = current_pin if keep_pin else ""
     
     # ✅ 로그아웃 직후 로그인 폼 주입 스크립트가 localStorage 기준으로 체크박스를
     # 다시 토글해버리지 않도록 remember 상태를 함께 동기화한다.
@@ -417,6 +425,51 @@ def _persist_remember_flags_to_query_params():
     _sync_login_persistence_cookies(current_name, current_pin, keep_name, keep_pin)
         
 
+def _hydrate_login_state_from_local_storage_via_query_params():
+    """브라우저 localStorage 값을 URL 쿼리로 동기화해 서버에서도 즉시 복원 가능하게 한다."""
+    components.html(
+        """
+        <script>
+        (() => {
+            const read = (k) => {
+                try { return String(localStorage.getItem(k) || "").trim(); }
+                catch (e) { return ""; }
+            };
+
+            const rememberName = read("ce_remember_name") === "1";
+            const rememberPin = read("ce_remember_pin") === "1";
+            const savedName = rememberName ? read("ce_saved_name") : "";
+            const savedPin = rememberPin ? read("ce_saved_pin") : "";
+
+            const url = new URL(window.parent?.location?.href || window.location.href);
+            const p = url.searchParams;
+            let changed = false;
+
+            const setParam = (key, value) => {
+                const curr = String(p.get(key) || "");
+                if (curr === value) return;
+                p.set(key, value);
+                changed = true;
+            };
+
+            setParam("remember_name", rememberName ? "1" : "0");
+            setParam("remember_pin", rememberPin ? "1" : "0");
+            setParam("saved_name", savedName);
+            setParam("saved_pin", savedPin);
+
+            if (changed) {
+                url.search = p.toString();
+                const target = url.toString();
+                try { window.parent.location.replace(target); }
+                catch (e) { window.location.replace(target); }
+            }
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+    
 # =========================
 # 모바일 UI CSS + 템플릿 정렬(촘촘) CSS
 # =========================
@@ -5025,6 +5078,7 @@ with st.sidebar:
                     st.error(res.get("error", "PIN 변경 실패"))
 
 
+_hydrate_login_state_from_local_storage_via_query_params
 _restore_login_from_query_params()
 if not st.session_state.get("logged_in", False):
     _restore_remember_flags_from_query_params()
@@ -6694,3 +6748,4 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
