@@ -56,6 +56,8 @@ st.session_state.setdefault("lottery_result_visible", False)
 st.session_state.setdefault("lottery_winners_visible", False)
 st.session_state.setdefault("remember_name_check", False)
 st.session_state.setdefault("remember_pin_check", False)
+st.session_state.setdefault("remember_name_pref", False)
+st.session_state.setdefault("remember_pin_pref", False)
 
 def _inject_login_prefill_from_local_storage():
     """로컬 스토리지에 저장된 로그인 입력값/체크값을 로그인 폼에 주입한다."""
@@ -140,8 +142,8 @@ def _inject_login_prefill_from_local_storage():
 
 def _persist_login_inputs(name: str, pin: str):
     """로그인 성공 시 remember 옵션 및 로그인 유지 정보를 저장한다."""
-    keep_name = bool(st.session_state.get("remember_name_check", False))
-    keep_pin = bool(st.session_state.get("remember_pin_check", False))
+    keep_name = bool(st.session_state.get("remember_name_pref", False))
+    keep_pin = bool(st.session_state.get("remember_pin_pref", False))
 
     st.query_params["login_keep"] = "1"
     st.query_params["login_name"] = str(name or "")
@@ -207,18 +209,32 @@ def _restore_remember_flags_from_query_params():
     remember_name_qp = qp.get("remember_name", None)
     remember_pin_qp = qp.get("remember_pin", None)
 
+    def _is_checked(v):
+        if v is None:
+            return None
+        if isinstance(v, (list, tuple)):
+            v = v[0] if v else ""
+        return str(v).strip() == "1"
+
     # ✅ 쿼리 파라미터가 있을 때만 덮어쓴다.
     # (로그아웃 직후 URL 동기화 타이밍 이슈로 값이 잠깐 비어도 체크가 풀리지 않게 보호)
-    if remember_name_qp is not None:
-        st.session_state.remember_name_check = str(remember_name_qp) == "1"
-    if remember_pin_qp is not None:
-        st.session_state.remember_pin_check = str(remember_pin_qp) == "1"
+    remember_name_checked = _is_checked(remember_name_qp)
+    remember_pin_checked = _is_checked(remember_pin_qp)
+
+    if remember_name_checked is not None:
+        st.session_state.remember_name_pref = remember_name_checked
+    if remember_pin_checked is not None:
+        st.session_state.remember_pin_pref = remember_pin_checked
+
+    # 로그인 폼 체크박스와 영구 remember 상태를 동기화
+    st.session_state.remember_name_check = bool(st.session_state.get("remember_name_pref", False))
+    st.session_state.remember_pin_check = bool(st.session_state.get("remember_pin_pref", False))
 
 
 def _persist_remember_flags_to_query_params():
     """로그인 상태와 무관하게 기억하기 체크 상태를 URL/로컬스토리지에 반영한다."""
-    keep_name = bool(st.session_state.get("remember_name_check", False))
-    keep_pin = bool(st.session_state.get("remember_pin_check", False))
+    keep_name = bool(st.session_state.get("remember_name_pref", False))
+    keep_pin = bool(st.session_state.get("remember_pin_pref", False))
     st.query_params["remember_name"] = "1" if keep_name else "0"
     st.query_params["remember_pin"] = "1" if keep_pin else "0"
     
@@ -4859,6 +4875,9 @@ else:
     st.subheader("🔐 로그인")
 
 if not st.session_state.logged_in:
+    st.session_state.remember_name_check = bool(st.session_state.get("remember_name_pref", False))
+    st.session_state.remember_pin_check = bool(st.session_state.get("remember_pin_pref", False))
+
     # ✅ Enter로 로그인 제출 가능하도록 form 사용
     with st.form("login_form", clear_on_submit=False):
         login_c1, login_c2 = st.columns(2)
@@ -4868,10 +4887,13 @@ if not st.session_state.logged_in:
             login_pin = st.text_input("비밀번호(4자리)", type="password", key="login_pin_input").strip()
         remember_c1, remember_c2 = st.columns(2)
         with remember_c1:
-            st.checkbox("아이디 기억하기", key="remember_name_check")
+            remember_name_widget = st.checkbox("아이디 기억하기", key="remember_name_check")
         with remember_c2:
-            st.checkbox("비밀번호 기억하기", key="remember_pin_check")
+            remember_pin_widget = st.checkbox("비밀번호 기억하기", key="remember_pin_check")
         login_btn = st.form_submit_button("로그인", use_container_width=True)
+
+    st.session_state.remember_name_pref = bool(remember_name_widget)
+    st.session_state.remember_pin_pref = bool(remember_pin_widget)
 
     _inject_login_prefill_from_local_storage()
 
@@ -6508,6 +6530,7 @@ with sub4:
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
     
+
 
 
 
