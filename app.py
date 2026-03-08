@@ -2977,7 +2977,7 @@ def parse_template_excel(uploaded_file):
     if df.empty:
         return {"ok": False, "error": "엑셀에 데이터가 없습니다."}
 
-    required_cols = ["내역이름", "구분", "종류", "금액", "순서"]
+    required_cols = ["내역이름", "종류", "금액", "순서"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         return {"ok": False, "error": f"필수 열 누락: {', '.join(missing)}"}
@@ -6411,84 +6411,6 @@ if st.session_state.admin_ok:
             # -------------------------------------------------
             # 3) 템플릿 추가/수정/삭제
             # -------------------------------------------------
-            st.markdown("### 📥 템플릿 엑셀로 일괄 추가")
-
-            sample_df = pd.DataFrame(
-                [
-                    {"내역이름": "칭찬스티커", "구분": "보상", "종류": "입금", "금액": 50, "순서": 1},
-                    {"내역이름": "문구점 구매", "구분": "구입", "종류": "출금", "금액": 300, "순서": 2},
-                    {"내역이름": "지각", "구분": "벌금", "종류": "출금", "금액": 100, "순서": 3},
-                ]
-            )
-            sample_buffer = io.BytesIO()
-            with pd.ExcelWriter(sample_buffer, engine="openpyxl") as writer:
-                sample_df.to_excel(writer, index=False, sheet_name="templates")
-            sample_buffer.seek(0)
-
-            st.download_button(
-                "📄 샘플 엑셀 다운로드",
-                data=sample_buffer.getvalue(),
-                file_name="template_bulk_sample.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="tpl_excel_sample_download",
-            )
-            st.caption("• 샘플 형식: 내역이름 | 구분(없음/보상/구입/벌금) | 종류(입금/출금) | 금액 | 순서")
-            st.caption("• 엑셀을 올린 뒤 아래 저장 버튼을 눌러야 실제 반영됩니다.")
-
-            tpl_excel_file = st.file_uploader(
-                "엑셀 업로드(.xlsx)",
-                type=["xlsx"],
-                key="tpl_excel_upload_setting",
-                help="한 번에 여러 템플릿을 업로드할 수 있습니다.",
-            )
-            tpl_excel_replace_all = st.checkbox(
-                "저장 시 기존 템플릿 리스트를 모두 삭제하고 새로 올린 엑셀로 덮어쓰기",
-                key="tpl_excel_replace_all",
-                value=False,
-            )
-
-            parse_res = parse_template_excel(tpl_excel_file) if tpl_excel_file is not None else {"ok": False}
-            if tpl_excel_file is not None:
-                if parse_res.get("ok"):
-                    st.success(f"엑셀 검증 완료: {len(parse_res.get('rows', []))}건")
-                    preview_rows = parse_res.get("rows", [])[:20]
-                    if preview_rows:
-                        preview_df = pd.DataFrame(preview_rows)
-                        preview_df["종류"] = preview_df["kind"].map({"deposit": "입금", "withdraw": "출금"})
-                        preview_df = preview_df.rename(
-                            columns={
-                                "label": "내역이름",
-                                "category": "구분",
-                                "amount": "금액",
-                                "order": "순서",
-                            }
-                        )
-                        st.dataframe(preview_df[["내역이름", "구분", "종류", "금액", "순서"]], use_container_width=True, hide_index=True)
-                else:
-                    st.error(parse_res.get("error", "엑셀 검증 실패"))
-
-            if st.button("✅ 엑셀 내용 저장(반영)", key="tpl_excel_save_btn", use_container_width=True):
-                if tpl_excel_file is None:
-                    st.error("업로드된 엑셀 파일이 없습니다.")
-                elif not parse_res.get("ok"):
-                    st.error(parse_res.get("error", "엑셀 형식을 확인해 주세요."))
-                else:
-                    save_res = api_admin_bulk_upsert_templates(
-                        admin_pin,
-                        parse_res.get("rows", []),
-                        replace_all=bool(tpl_excel_replace_all),
-                    )
-                    if save_res.get("ok"):
-                        if save_res.get("replace_all"):
-                            toast(f"엑셀 템플릿 덮어쓰기 저장 완료 ({save_res.get('count')}건)", icon="✅")
-                        else:
-                            toast(f"엑셀 템플릿 추가 저장 완료 ({save_res.get('count')}건)", icon="✅")
-                        api_list_templates_cached.clear()
-                        st.rerun()
-                    else:
-                        st.error(save_res.get("error", "엑셀 저장 실패"))
-
             st.markdown("### 🧩 템플릿 추가/수정/삭제")
 
             KIND_TO_KR = {"deposit": "입금", "withdraw": "출금"}
@@ -6585,6 +6507,84 @@ if st.session_state.admin_ok:
                         if st.button("아니오", key="tpl_del_no_setting2", use_container_width=True):
                             st.session_state["tpl_del_confirm_setting2"] = False
                             st.rerun()
+
+            st.markdown("### 📥 템플릿 엑셀로 일괄 추가")
+
+            sample_df = pd.DataFrame(
+                [
+                    {"내역이름": "칭찬스티커", "종류": "입금", "금액": 50, "순서": 1},
+                    {"내역이름": "문구점 구매", "종류": "출금", "금액": 300, "순서": 2},
+                    {"내역이름": "지각", "종류": "출금", "금액": 100, "순서": 3},
+                ]
+            )
+            sample_buffer = io.BytesIO()
+            with pd.ExcelWriter(sample_buffer, engine="openpyxl") as writer:
+                sample_df.to_excel(writer, index=False, sheet_name="templates")
+            sample_buffer.seek(0)
+
+            st.download_button(
+                "📄 샘플 엑셀 다운로드",
+                data=sample_buffer.getvalue(),
+                file_name="template_bulk_sample.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="tpl_excel_sample_download",
+            )
+            st.caption("• 샘플 형식: 내역이름 | 종류(입금/출금) | 금액 | 순서")
+            st.caption("• 엑셀을 올린 뒤 아래 저장 버튼을 눌러야 실제 반영됩니다.")
+
+            tpl_excel_file = st.file_uploader(
+                "엑셀 업로드(.xlsx)",
+                type=["xlsx"],
+                key="tpl_excel_upload_setting",
+                help="한 번에 여러 템플릿을 업로드할 수 있습니다.",
+            )
+            tpl_excel_replace_all = st.checkbox(
+                "저장 시 기존 템플릿 리스트를 모두 삭제하고 새로 올린 엑셀로 덮어쓰기",
+                key="tpl_excel_replace_all",
+                value=False,
+            )
+
+            parse_res = parse_template_excel(tpl_excel_file) if tpl_excel_file is not None else {"ok": False}
+            if tpl_excel_file is not None:
+                if parse_res.get("ok"):
+                    st.success(f"엑셀 검증 완료: {len(parse_res.get('rows', []))}건")
+                    preview_rows = parse_res.get("rows", [])[:20]
+                    if preview_rows:
+                        preview_df = pd.DataFrame(preview_rows)
+                        preview_df["종류"] = preview_df["kind"].map({"deposit": "입금", "withdraw": "출금"})
+                        preview_df = preview_df.rename(
+                            columns={
+                                "label": "내역이름",
+                                "category": "구분",
+                                "amount": "금액",
+                                "order": "순서",
+                            }
+                        )
+                        st.dataframe(preview_df[["내역이름", "종류", "금액", "순서"]], use_container_width=True, hide_index=True)
+                else:
+                    st.error(parse_res.get("error", "엑셀 검증 실패"))
+
+            if st.button("✅ 엑셀 내용 저장(반영)", key="tpl_excel_save_btn", use_container_width=True):
+                if tpl_excel_file is None:
+                    st.error("업로드된 엑셀 파일이 없습니다.")
+                elif not parse_res.get("ok"):
+                    st.error(parse_res.get("error", "엑셀 형식을 확인해 주세요."))
+                else:
+                    save_res = api_admin_bulk_upsert_templates(
+                        admin_pin,
+                        parse_res.get("rows", []),
+                        replace_all=bool(tpl_excel_replace_all),
+                    )
+                    if save_res.get("ok"):
+                        if save_res.get("replace_all"):
+                            toast(f"엑셀 템플릿 덮어쓰기 저장 완료 ({save_res.get('count')}건)", icon="✅")
+                        else:
+                            toast(f"엑셀 템플릿 추가 저장 완료 ({save_res.get('count')}건)", icon="✅")
+                        api_list_templates_cached.clear()
+                        st.rerun()
+                    else:
+                        st.error(save_res.get("error", "엑셀 저장 실패"))        
 
 
         with setting_tabs[1]:
@@ -7141,6 +7141,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
