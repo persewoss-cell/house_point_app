@@ -101,21 +101,12 @@ def _read_login_persistence_defaults():
     except Exception:
         pass
 
-    # remember 플래그가 누락됐더라도 저장된 이름/PIN이 있으면 기억하기를 복원한다.
-    if not remember_login and (str(saved_name).strip() or str(saved_pin).strip()):
-        remember_login = True
-
     return saved_name, saved_pin, remember_login
 
 
 def _is_remember_login_locked(default_keep_login: bool = False, saved_name: str = "", saved_pin: str = "") -> bool:
-    """한 번 켠 로그인정보 기억하기를 해제되지 않도록 잠금 상태를 계산한다."""
-    return bool(
-        st.session_state.get("remember_login_locked", False)
-        or default_keep_login
-        or str(saved_name or "").strip()
-        or str(saved_pin or "").strip()
-    )
+    """로그인정보 기억하기 체크는 사용자가 언제든 자유롭게 변경할 수 있다."""
+    return False
 
 
 def _apply_remember_login_lock(
@@ -124,12 +115,9 @@ def _apply_remember_login_lock(
     saved_name: str = "",
     saved_pin: str = "",
 ) -> bool:
-    """잠금 조건이 있으면 기억하기 체크를 강제로 유지한다."""
-    locked = _is_remember_login_locked(default_keep_login, saved_name, saved_pin)
-    if keep_login:
-        locked = True
-    st.session_state.remember_login_locked = bool(locked)
-    return bool(keep_login or locked)
+    """기억하기 체크는 잠그지 않고 현재 선택값을 그대로 반영한다."""
+    st.session_state.remember_login_locked = False
+    return bool(keep_login)
 
 
 def _sync_login_persistence_cookies(name: str, pin: str, remember_login: bool):
@@ -357,19 +345,6 @@ def _persist_remember_flags_to_query_params():
     )
     keep_login = _apply_remember_login_lock(keep_login, default_keep_login, default_saved_name, default_saved_pin)
 
-    # 로그인 화면이 아닌 상태(로그인 완료/새로고침 직후)에서는
-    # remember 위젯 키가 기본값(False)로 재생성될 수 있다.
-    # 이미 저장된 remember 단서가 있으면 로그아웃 시 보수적으로 유지한다.
-    qp_remember_login = str(st.query_params.get("remember_login", "") or "").strip()
-    had_persisted_login_hint = bool(
-        default_keep_login
-        or default_saved_name
-        or default_saved_pin
-        or qp_remember_login == "1"
-    )
-    if st.session_state.get("logged_in", False) and not keep_login and had_persisted_login_hint:
-        keep_login = True
-
     current_name = str(st.session_state.get("login_name", "") or "").strip()
     current_pin = str(st.session_state.get("login_pin", "") or "").strip()
     if keep_login and not current_name:
@@ -506,7 +481,7 @@ def _hydrate_login_form_dom_from_storage():
             const savedPin = readLocal("ce_saved_login_pin") || readCookie("ce_saved_login_pin");
             const rememberFromLocal = readLocal("ce_remember_login") === "1";
             const rememberFromCookie = readCookie("ce_remember_login") === "1";
-            const shouldRemember = rememberFromLocal || rememberFromCookie || Boolean(savedName || savedPin);
+            const shouldRemember = rememberFromLocal || rememberFromCookie;
 
             const rootDoc = (() => {
                 try {
@@ -669,9 +644,7 @@ def _hydrate_login_state_from_local_storage_via_query_params():
             const savedName = read("ce_saved_login_name") || readCookie("ce_saved_login_name");
             const savedPin = read("ce_saved_login_pin") || readCookie("ce_saved_login_pin");
 
-            // 일부 환경에서 ce_remember_login 키가 유실되어도
-            // 저장된 이름/PIN이 있으면 remember=true로 간주한다.
-            const rememberLogin = rememberLoginFlag || Boolean(savedName || savedPin);
+            const rememberLogin = rememberLoginFlag;
 
             const hasRememberLogin = hasKey("ce_remember_login") || hasCookie("ce_remember_login");
             const hasSavedName = hasKey("ce_saved_login_name") || hasCookie("ce_saved_login_name");
@@ -5363,8 +5336,6 @@ if not st.session_state.logged_in:
         remember_login_widget = st.checkbox("로그인정보 기억하기", key="remember_login_check")
         login_btn = st.form_submit_button("로그인", use_container_width=True)
 
-    remember_locked = bool(st.session_state.get("remember_login_locked", False))
-    remember_login_widget = bool(remember_login_widget or remember_locked)
     st.session_state.remember_login_pref = bool(remember_login_widget)
 
     _persist_login_form_state(login_name, login_pin)
@@ -6960,6 +6931,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
