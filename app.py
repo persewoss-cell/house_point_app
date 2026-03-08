@@ -397,7 +397,6 @@ def _persist_login_form_state(name_input: str, pin_input: str):
         st.session_state.login_persistence_hydrated = True
 
     effective_keep_login = bool(keep_login)
-    )
 
     st.session_state.remember_login_pref = bool(effective_keep_login)
 
@@ -6913,6 +6912,7 @@ with sub4:
 # =========================
 with sub5:
     render_lottery_user(name, pin, str(student_id or ""), int(st.session_state.data.get(name, {}).get("balance", balance)))
+
 
 
 
