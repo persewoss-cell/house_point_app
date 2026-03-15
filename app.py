@@ -4989,40 +4989,62 @@ def _render_jobs_admin_like():
 
 
     # -------------------------------------------------
-    # ✅ 직업 CSV 일괄 업로드 (정원 컬럼 없음)
+    # ✅ 직업 엑셀 일괄 업로드 (정원 컬럼 없음)
     # -------------------------------------------------
-    st.markdown("### 📥 직업 CSV 일괄 업로드")
-    st.caption("CSV 컬럼은 반드시: 순 | 직업 | 월급 이어야 합니다. (정원/사람수 없음)")
+    st.markdown("### 📥 직업 엑셀 일괄 업로드")
+    st.caption("엑셀 컬럼은 반드시: 순 | 직업 | 월급 이어야 합니다. (정원/사람수 없음)")
 
-    import io
     sample_df = pd.DataFrame(
         [
             {"순": 1, "직업": "반장", "월급": 500},
             {"순": 2, "직업": "서기", "월급": 300},
         ]
     )
-    bio = io.StringIO()
-    sample_df.to_csv(bio, index=False, encoding="utf-8-sig")
-    st.download_button(
-        "📄 직업 샘플 CSV 다운로드",
-        data=bio.getvalue().encode("utf-8-sig"),
-        file_name="jobs_sample.csv",
-        mime="text/csv",
-        use_container_width=True,
-        key="jobs_sample_csv_btn",
-    )
+    sample_buffer = io.BytesIO()
+    with pd.ExcelWriter(sample_buffer, engine="openpyxl") as writer:
+        sample_df.to_excel(writer, index=False, sheet_name="jobs")
+    sample_buffer.seek(0)
 
-    up = st.file_uploader("CSV 업로드", type=["csv"], key="jobs_bulk_up")
+    current_jobs_df = pd.DataFrame(
+        [{"순": int(r.get("order", 0) or 0), "직업": str(r.get("job", "") or ""), "월급": int(r.get("salary", 0) or 0)} for r in rows],
+        columns=["순", "직업", "월급"],
+    ).sort_values("순", kind="mergesort")
+    current_jobs_buffer = io.BytesIO()
+    with pd.ExcelWriter(current_jobs_buffer, engine="openpyxl") as writer:
+        current_jobs_df.to_excel(writer, index=False, sheet_name="jobs")
+    current_jobs_buffer.seek(0)
+
+    jdl_col1, jdl_col2 = st.columns(2)
+    with jdl_col1:
+        st.download_button(
+            "📄 샘플 엑셀 다운로드",
+            data=sample_buffer.getvalue(),
+            file_name="jobs_sample.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="jobs_sample_excel_btn",
+        )
+    with jdl_col2:
+        st.download_button(
+            "📥 현재 엑셀 템플릿 다운로드",
+            data=current_jobs_buffer.getvalue(),
+            file_name="jobs_current_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="jobs_current_excel_btn",
+        )
+
+    up = st.file_uploader("엑셀 업로드(.xlsx)", type=["xlsx"], key="jobs_bulk_up")
     col1, col2 = st.columns([1, 1])
     with col1:
         wipe = st.checkbox("업로드 전 기존 직업 목록 전체 삭제", value=False, key="jobs_bulk_wipe")
     with col2:
         if st.button("⬆️ 업로드 적용", use_container_width=True, key="jobs_bulk_apply", disabled=(up is None)):
             try:
-                df = pd.read_csv(up)
+                df = pd.read_excel(up)
                 need_cols = {"순", "직업", "월급"}
                 if not need_cols.issubset(set(df.columns)):
-                    st.error("CSV 컬럼은 반드시: 순 | 직업 | 월급 이어야 합니다.")
+                    st.error("엑 컬럼은 반드시: 순 | 직업 | 월급 이어야 합니다.")
                     st.stop()
 
                 df["순"] = pd.to_numeric(df["순"], errors="coerce").fillna(0).astype(int)
@@ -6522,14 +6544,41 @@ if st.session_state.admin_ok:
                 sample_df.to_excel(writer, index=False, sheet_name="templates")
             sample_buffer.seek(0)
 
-            st.download_button(
-                "📄 샘플 엑셀 다운로드",
-                data=sample_buffer.getvalue(),
-                file_name="template_bulk_sample.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="tpl_excel_sample_download",
-            )
+            current_tpl_rows = []
+            for t in sorted((templates_now or []), key=lambda x: int(x.get("order", 0) or 0)):
+                current_tpl_rows.append(
+                    {
+                        "내역이름": str(t.get("label", "") or ""),
+                        "종류": "입금" if str(t.get("kind", "deposit")) == "deposit" else "출금",
+                        "금액": int(t.get("amount", 0) or 0),
+                        "순서": int(t.get("order", 1) or 1),
+                    }
+                )
+            current_tpl_df = pd.DataFrame(current_tpl_rows, columns=["내역이름", "종류", "금액", "순서"])
+            current_tpl_buffer = io.BytesIO()
+            with pd.ExcelWriter(current_tpl_buffer, engine="openpyxl") as writer:
+                current_tpl_df.to_excel(writer, index=False, sheet_name="templates")
+            current_tpl_buffer.seek(0)
+
+            dl_col1, dl_col2 = st.columns(2)
+            with dl_col1:
+                st.download_button(
+                    "📄 샘플 엑셀 다운로드",
+                    data=sample_buffer.getvalue(),
+                    file_name="template_bulk_sample.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="tpl_excel_sample_download",
+                )
+            with dl_col2:
+                st.download_button(
+                    "📥 현재 엑셀 템플릿 다운로드",
+                    data=current_tpl_buffer.getvalue(),
+                    file_name="template_bulk_current.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="tpl_excel_current_download",
+                )
             st.caption("• 샘플 형식: 내역이름 | 종류(입금/출금) | 금액 | 순서")
             st.caption("• 엑셀을 올린 뒤 아래 저장 버튼을 눌러야 실제 반영됩니다.")
 
