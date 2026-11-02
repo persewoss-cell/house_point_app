@@ -4,6 +4,7 @@ import { api } from "../lib/api.js";
 import { useApp, useLoad, Cols, H3, Caption, Btn, Checkbox, TextInput, Info, Warning, ErrorBox, Expander, DataTable, Loading, Popup } from "../components/ui.jsx";
 import { TX_COLUMNS, txRowsView } from "../components/trade.jsx";
 import { SavingsList } from "./Savings.jsx";
+import { GoalReadonly } from "./Goal.jsx";
 
 function SavingsOf({ sid }) {
   const sv = useLoad("savings_of", { sid }, [sid]);
@@ -122,6 +123,8 @@ function StudentDetail({ sid, onChanged }) {
         </>
       ) : null}
       <SavingsOf sid={sid} />
+      <H3>🎯 목표 저금(조회)</H3>
+      <GoalReadonly sid={sid} />
     </>
   );
 }

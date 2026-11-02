@@ -8,6 +8,9 @@ import Individual from "./tabs/Individual.jsx";
 import Savings from "./tabs/Savings.jsx";
 import Invest from "./tabs/Invest.jsx";
 import Jobs from "./tabs/Jobs.jsx";
+import Auction from "./tabs/Auction.jsx";
+import Lottery from "./tabs/Lottery.jsx";
+import Goal from "./tabs/Goal.jsx";
 import { configMissing } from "./backend/firebase.js";
 
 // 메뉴에 보이는 아이콘만 더 귀엽게 (권한 이름·저장 값은 그대로)
@@ -35,6 +38,9 @@ const TAB_LOADS = {
   "💼 직업/월급": () => [["jobs_load", {}]],
   "🏦 은행(적금)": () => [["savings_load", {}]],
   "📈 투자": (admin) => [["invest_load", { admin_mode: admin }]],
+  "🏷️ 경매": (admin) => (admin ? [["auction_admin_load", { pick_round_id: "" }]] : [["auction_user_load", {}]]),
+  "🍀 복권": (admin) => (admin ? [] : [["lottery_user_load", {}]]),
+  "🎯 목표": () => [["goal_load", {}]],
 };
 
 // 관리자 탭 (기존 우리집 앱 순서: 입금/출금 · 개별조회 · 직업/월급 · 투자 · 경매 · 복권)
@@ -132,6 +138,12 @@ function TabContent({ tab, user }) {
       return <Savings />;
     case "📈 투자":
       return <Invest adminMode={isAdmin} />;
+    case "🏷️ 경매":
+      return <Auction />;
+    case "🍀 복권":
+      return <Lottery />;
+    case "🎯 목표":
+      return <Goal />;
     default:
       return <Info>🚧 이 메뉴는 다음 단계에서 옮겨 올 예정이에요.</Info>;
   }

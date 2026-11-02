@@ -8,8 +8,11 @@ import individual from "./actions/individual.js";
 import savings, { processMaturities } from "./actions/savings.js";
 import invest from "./actions/invest.js";
 import jobs, { runAutoPayroll } from "./actions/jobs.js";
+import auction from "./actions/auction.js";
+import lottery from "./actions/lottery.js";
+import goal from "./actions/goal.js";
 
-const ACTIONS = { ...session, ...bank, ...individual, ...savings, ...invest, ...jobs };
+const ACTIONS = { ...session, ...bank, ...individual, ...savings, ...invest, ...jobs, ...auction, ...lottery, ...goal };
 
 // 자동 처리(적금 만기 지급 + 월급 자동지급): 로그인·새로고침 때 시도 (1분에 한 번까지)
 async function runAuto() {
