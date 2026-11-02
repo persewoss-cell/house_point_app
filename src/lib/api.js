@@ -65,7 +65,7 @@ export async function api(action, args = {}) {
   }
 }
 
-// 로그인 정보 기억하기 (기존 앱의 ce_saved_name / ce_saved_pin 과 같은 키)
+// 로그인 정보 기억하기 (이 기기 브라우저에 저장)
 export const remember = {
   read() {
     const r = (k) => {

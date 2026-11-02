@@ -1,16 +1,14 @@
 // 입금/출금 입력 폼(render_admin_trade_ui)
 import React, { useState } from "react";
-import { Btn, TextInput, NumberInput, Select, Checkbox, moveItem } from "./ui.jsx";
+import { Btn, TextInput, NumberInput, Select, moveItem } from "./ui.jsx";
 
 const QUICK = [10, 20, 50, 100, 200, 500, 1000];
 
 export const templateDisplay = (t) => `${t.label}[${t.kind === "deposit" ? "입금" : "출금"} ${parseInt(t.amount, 10) || 0}]`;
 
 // 금액칸 하나 + 맨 아래 [입금] [출금] 버튼. 버튼을 누르는 순간 방향이 정해져서 (+)/(-) 전환을 깜빡할 일이 없음.
-// treasuryDefault: 국고 반영 처음 상태(학생 true / 관리자 false → 입금·출금 누를 때 팝업으로 물어봄)
-// treasuryTouched: 체크칸을 직접 눌렀는지 (눌렀으면 팝업 없이 그 상태로 반영)
-export function useTradeForm(treasuryDefault = true) {
-  const init = () => ({ tpl: "(직접 입력)", memo: "", treasury: treasuryDefault, treasuryTouched: false, amount: 0, hint: "" });
+export function useTradeForm() {
+  const init = () => ({ tpl: "(직접 입력)", memo: "", amount: 0, hint: "" });
   const [f, setF] = useState(init);
   return [f, setF, () => setF(init())];
 }
@@ -32,19 +30,17 @@ function RoundButtons({ onPick }) {
 }
 
 // 금액 입력 + 방향 버튼 공용 폼 (2줄 · 3칸이 위아래로 맞춰짐)
-//   1줄: [내역 템플릿] [내역]          [국고 반영]
+//   1줄: [내역 템플릿] [내역]
 //   2줄: [금액]       [+10 … 지우기] [입금] [출금] (+ 되돌리기 등 extra)
 // actions: [[방향("in"|"out"), 버튼 글자], [..]]  onAction(방향) 은 Promise 를 돌려주면 처리 중 버튼이 잠김
 // onMove: 템플릿 드롭다운 각 줄의 ▲▼ (있을 때만)
-function AmountForm({ form, setForm, tplLabel, tplOptions, onTpl, onMove, showTreasury, actions, onAction, extra }) {
+function AmountForm({ form, setForm, tplLabel, tplOptions, onTpl, onMove, actions, onAction, extra }) {
   const onPick = (amt) => setForm((f) => ({ ...f, amount: amt === 0 ? 0 : (f.amount || 0) + amt }));
   return (
     <div className="trade-grid">
       <Select label={tplLabel} value={form.tpl} options={tplOptions} onChange={onTpl} onMove={onMove} />
       <TextInput label="내역" value={form.memo} onChange={(v) => setForm((f) => ({ ...f, memo: v }))} />
-      <div className="tg-check">
-        {showTreasury ? <Checkbox label="국고 반영" checked={form.treasury} onChange={(v) => setForm((f) => ({ ...f, treasury: v, treasuryTouched: true }))} /> : null}
-      </div>
+      <div className="tg-check" />
       <NumberInput label="금액" min={0} value={form.amount} stepper={false} onChange={(v) => setForm((f) => ({ ...f, amount: v }))} />
       <RoundButtons onPick={onPick} />
       <div className="tg-actions">
@@ -69,7 +65,7 @@ function tplChoices(templates, disp, onReorder) {
 }
 
 // 통장 입금/출금 (관리자 개인·전체, 가족 통장)
-export function TradeForm({ form, setForm, templates, onAction, depositText = "💰 입금", extra, onReorder, showTreasury = false }) {
+export function TradeForm({ form, setForm, templates, onAction, depositText = "💰 입금", extra, onReorder }) {
   const byDisp = {};
   (templates || []).forEach((t) => (byDisp[templateDisplay(t)] = t));
   const { options: labels, onMove } = tplChoices(templates, templateDisplay, onReorder);
@@ -88,7 +84,6 @@ export function TradeForm({ form, setForm, templates, onAction, depositText = "�
       tplOptions={labels}
       onTpl={onTpl}
       onMove={onMove}
-      showTreasury={showTreasury}
       actions={[["in", depositText], ["out", "💸 출금"]]}
       onAction={onAction}
       extra={extra}

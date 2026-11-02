@@ -270,7 +270,7 @@ export function BankAdmin() {
   };
 
   // 전체
-  const [bForm, setBForm, bReset] = useTradeForm(false);
+  const [bForm, setBForm, bReset] = useTradeForm();
   const [bErr, setBErr] = useState("");
   const [undo, setUndo] = useState(false);
   const undoBtn = (
@@ -295,7 +295,7 @@ export function BankAdmin() {
 
   // 개인
   const [picks, setPicks] = useState({});
-  const [pForm, setPForm, pReset] = useTradeForm(false);
+  const [pForm, setPForm, pReset] = useTradeForm();
   const [pErr, setPErr] = useState("");
   const accs = useMemo(() => (accounts.data && accounts.data.accounts) || [], [accounts.data]);
   const selected = accs.filter((a) => picks[a.student_id]);
