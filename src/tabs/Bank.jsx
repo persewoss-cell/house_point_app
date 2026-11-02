@@ -53,23 +53,6 @@ function UndoPanel({ onClose }) {
 }
 
 // ---------------- 템플릿 ----------------
-const CATS = ["없음", "보상", "구입", "벌금"];
-function parseLabel(label) {
-  const s = String(label || "").trim();
-  if (s.startsWith("[") && s.includes("]")) {
-    const e = s.indexOf("]");
-    let rest = s.slice(e + 1).trim();
-    if (rest.startsWith("-")) rest = rest.slice(1).trim();
-    return [s.slice(1, e).trim(), rest];
-  }
-  return ["", s];
-}
-function catForExcel(t) {
-  const raw = String(t.category || "").trim();
-  const cat = raw || parseLabel(t.label)[0];
-  return CATS.includes(cat) ? cat : "없음";
-}
-
 function TemplateManager({ templates, reload, reorder }) {
   const app = useApp();
   const [mode, setMode] = useState("추가");
@@ -81,7 +64,7 @@ function TemplateManager({ templates, reload, reorder }) {
   const delIdx = idxOf(delId);
   const setPickIdx = (i) => setPickId(templates[i] ? templates[i].template_id : null);
   const setDelIdx = (i) => setDelId(templates[i] ? templates[i].template_id : null);
-  const [form, setForm] = useState({ edit_id: "", base: "", cat: "없음", kind: "입금", amount: 10, order: 1 });
+  const [form, setForm] = useState({ edit_id: "", base: "", kind: "입금", amount: 10, order: 1 });
   const [err, setErr] = useState("");
   const [delConfirm, setDelConfirm] = useState(false);
   const [file, setFile] = useState(null);
@@ -91,10 +74,7 @@ function TemplateManager({ templates, reload, reorder }) {
   const [bulkErr, setBulkErr] = useState("");
 
   const fill = (t) => {
-    let cat = String(t.category || "").trim();
-    let base = String(t.base_label || "").trim();
-    if (!cat && !base) [cat, base] = parseLabel(t.label);
-    setForm({ edit_id: t.template_id, base, cat: cat || "없음", kind: t.kind === "withdraw" ? "출금" : "입금", amount: t.amount || 10, order: t.order || 1 });
+    setForm({ edit_id: t.template_id, base: String(t.label || "").trim(), kind: t.kind === "withdraw" ? "출금" : "입금", amount: t.amount || 10, order: t.order || 1 });
   };
 
   const onMode = (m) => {
@@ -112,7 +92,6 @@ function TemplateManager({ templates, reload, reorder }) {
     const r = await api("template_save", {
       template_id: mode === "수정" ? form.edit_id : "",
       base_label: form.base.trim(),
-      category: form.cat === "없음" ? "" : form.cat,
       kind: form.kind === "입금" ? "deposit" : "withdraw",
       amount: form.amount,
       order: form.order,
@@ -135,16 +114,14 @@ function TemplateManager({ templates, reload, reorder }) {
     } else setErr(r.error || "삭제 실패");
   };
 
-  const COLS = ["내역이름", "구분", "종류", "금액", "순서"];
+  const COLS = ["내역이름", "종류", "금액", "순서"];
   const sample = [
-    { 내역이름: "대여료", 구분: "구입", 종류: "출금", 금액: 100, 순서: 1 },
-    { 내역이름: "발표", 구분: "보상", 종류: "입금", 금액: 10, 순서: 2 },
-    { 내역이름: "지각", 구분: "벌금", 종류: "출금", 금액: 20, 순서: 3 },
-    { 내역이름: "기타", 구분: "없음", 종류: "입금", 금액: 5, 순서: 4 },
+    { 내역이름: "칭찬스티커", 종류: "입금", 금액: 50, 순서: 1 },
+    { 내역이름: "문구점 구매", 종류: "출금", 금액: 300, 순서: 2 },
+    { 내역이름: "지각", 종류: "출금", 금액: 100, 순서: 3 },
   ];
   const current = templates.map((t) => ({
-    내역이름: String(t.base_label || "").trim() || parseLabel(t.label)[1],
-    구분: catForExcel(t),
+    내역이름: String(t.label || "").trim(),
     종류: t.kind === "deposit" ? "입금" : "출금",
     금액: t.amount,
     순서: t.order,
@@ -164,11 +141,8 @@ function TemplateManager({ templates, reload, reorder }) {
         return v === undefined || v === null || v === "" || !Number.isFinite(n) ? d : Math.trunc(n);
       };
       const df = rows.map((r) => {
-        let cat = r["구분"] === undefined || r["구분"] === null ? "" : String(r["구분"]).trim();
-        if (["nan", "None", ""].includes(cat)) cat = "없음";
         return {
-          내역이름: r["내역이름"] === undefined ? "nan" : String(r["내역이름"]).trim(),
-          구분: cat,
+          내역이름: r["내역이름"] === undefined || r["내역이름"] === null ? "" : String(r["내역이름"]).trim(),
           종류: r["종류"] === undefined ? "nan" : String(r["종류"]).trim(),
           금액: toNum(r["금액"], 0),
           순서: toNum(r["순서"], 999999),
@@ -176,7 +150,6 @@ function TemplateManager({ templates, reload, reorder }) {
       });
       const msgs = [];
       if (df.some((r) => r.내역이름.length === 0)) msgs.push("❌ 내역이름이 비어있는 행이 있습니다.");
-      if (df.some((r) => !CATS.includes(r.구분))) msgs.push("❌ 구분 값이 잘못된 행이 있습니다. (없음/보상/구입/벌금만 가능)");
       if (df.some((r) => !["입금", "출금"].includes(r.종류))) msgs.push("❌ 종류 값이 잘못된 행이 있습니다. (입금/출금만 가능)");
       if (df.some((r) => r.금액 <= 0)) msgs.push("❌ 금액은 1 이상이어야 합니다.");
       if (msgs.length) return setBulkMsgs(msgs);
@@ -241,9 +214,8 @@ function TemplateManager({ templates, reload, reorder }) {
               }}
             />
           ) : null}
-          <Cols w={[3, 1.3, 1.1, 1.1, 0.9, 1.2]} va="bottom">
+          <Cols w={[3, 1.1, 1.1, 0.9, 1.2]} va="bottom">
             <TextInput label="내역 이름" value={form.base} onChange={(v) => setForm((f) => ({ ...f, base: v }))} />
-            <Select label="구분" value={form.cat} options={CATS} onChange={(v) => setForm((f) => ({ ...f, cat: v }))} />
             <Select label="종류" value={form.kind} options={["입금", "출금"]} onChange={(v) => setForm((f) => ({ ...f, kind: v }))} />
             <NumberInput label="금액" min={1} stepper={false} value={form.amount} onChange={(v) => setForm((f) => ({ ...f, amount: v }))} />
             <NumberInput label="순서" min={1} stepper={false} value={form.order} onChange={(v) => setForm((f) => ({ ...f, order: v }))} />

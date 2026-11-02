@@ -6,12 +6,6 @@ import { str, toInt, ior, toDate, fmtKrDatetimeNoYear } from "../../shared/forma
 
 const newBatchId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
-function composeLabel(base, cat) {
-  base = str(base).trim();
-  cat = str(cat).trim();
-  return cat && cat !== "없음" ? `[${cat}] ${base}` : base;
-}
-
 export async function listTemplates() {
   const docs = await find("templates");
   const out = [];
@@ -20,8 +14,6 @@ export async function listTemplates() {
     out.push({
       template_id: String(t._id),
       label: t.label,
-      category: str(t.category) === "없음" ? "" : str(t.category),
-      base_label: str(t.base_label),
       kind: t.kind,
       amount: toInt(t.amount),
       order: ior(t.order, 999999),
@@ -31,10 +23,9 @@ export async function listTemplates() {
   return out;
 }
 
-async function upsertTemplate({ template_id, base_label, category, kind, amount, order }) {
-  base_label = str(base_label).trim();
-  category = str(category).trim();
-  const label = composeLabel(base_label, category);
+// 템플릿: 내역 이름 · 종류 · 금액 · 순서 (기존 앱과 같은 필드)
+async function upsertTemplate({ template_id, base_label, kind, amount, order }) {
+  const label = str(base_label).trim();
   kind = str(kind).trim();
   amount = toInt(amount);
   order = ior(order, 1);
@@ -42,7 +33,7 @@ async function upsertTemplate({ template_id, base_label, category, kind, amount,
   if (kind !== "deposit" && kind !== "withdraw") fail("종류는 입금/출금만 가능합니다.");
   if (amount <= 0) fail("금액은 1 이상이어야 합니다.");
   if (order <= 0) fail("순서는 1 이상이어야 합니다.");
-  const payload = { label, base_label, category: category || "없음", kind, amount, order };
+  const payload = { label, kind, amount, order };
   if (template_id) await set("templates", template_id, payload, true);
   else await add("templates", payload);
 }
@@ -85,10 +76,8 @@ export default {
     }
     let saved = 0;
     for (const r of rows) {
-      const cat = str(r["구분"]).trim();
       await upsertTemplate({
         base_label: r["내역이름"],
-        category: cat === "없음" ? "" : cat,
         kind: str(r["종류"]).trim() === "입금" ? "deposit" : "withdraw",
         amount: r["금액"],
         order: r["순서"],
