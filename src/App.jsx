@@ -5,6 +5,9 @@ import { StudentPinModal, AdminAccountModal } from "./components/AccountModals.j
 import UserHeader from "./components/UserHeader.jsx";
 import { BankAdmin, BankStudent } from "./tabs/Bank.jsx";
 import Individual from "./tabs/Individual.jsx";
+import Savings from "./tabs/Savings.jsx";
+import Invest from "./tabs/Invest.jsx";
+import Jobs from "./tabs/Jobs.jsx";
 import { configMissing } from "./backend/firebase.js";
 
 // 메뉴에 보이는 아이콘만 더 귀엽게 (권한 이름·저장 값은 그대로)
@@ -29,6 +32,9 @@ function menuLabel(label) {
 const TAB_LOADS = {
   "🏦 내 통장": (admin) => (admin ? [["templates_list", {}], ["accounts_list", {}]] : [["templates_list", {}], ["tx_list", { limit: 300 }]]),
   "🔎 개별조회": () => [["individual_students", {}]],
+  "💼 직업/월급": () => [["jobs_load", {}]],
+  "🏦 은행(적금)": () => [["savings_load", {}]],
+  "📈 투자": (admin) => [["invest_load", { admin_mode: admin }]],
 };
 
 // 관리자 탭 (기존 우리집 앱 순서: 입금/출금 · 개별조회 · 직업/월급 · 투자 · 경매 · 복권)
@@ -120,6 +126,12 @@ function TabContent({ tab, user }) {
       return isAdmin ? <BankAdmin /> : <BankStudent />;
     case "🔎 개별조회":
       return <Individual />;
+    case "💼 직업/월급":
+      return <Jobs />;
+    case "🏦 은행(적금)":
+      return <Savings />;
+    case "📈 투자":
+      return <Invest adminMode={isAdmin} />;
     default:
       return <Info>🚧 이 메뉴는 다음 단계에서 옮겨 올 예정이에요.</Info>;
   }

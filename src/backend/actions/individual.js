@@ -5,6 +5,7 @@ import {
   activeStudents, loadRoleLookup, roleNameFor, loadInvestProductMap, investSummary, canRemove, rolledBackIds, removeTx, getOne,
 } from "../core.js";
 import { str, toInt } from "../../shared/format.js";
+import { savingsRowsFor } from "./savings.js";
 
 export default {
   async individual_students(ctx) {
@@ -47,6 +48,12 @@ export default {
       })
     );
     return { rows };
+  },
+
+  // 가족 한 명의 적금 내역 (읽기 전용)
+  async savings_of(ctx, { sid }) {
+    requireAdmin(ctx);
+    return { rows: await savingsRowsFor(str(sid)) };
   },
 
   // 체크한 통장내역 완전히 삭제 (잔액·이후 총액 정정)

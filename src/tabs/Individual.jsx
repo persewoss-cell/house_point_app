@@ -3,6 +3,17 @@ import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { useApp, useLoad, Cols, H3, Caption, Btn, Checkbox, TextInput, Info, Warning, ErrorBox, Expander, DataTable, Loading, Popup } from "../components/ui.jsx";
 import { TX_COLUMNS, txRowsView } from "../components/trade.jsx";
+import { SavingsList } from "./Savings.jsx";
+
+function SavingsOf({ sid }) {
+  const sv = useLoad("savings_of", { sid }, [sid]);
+  return (
+    <>
+      <H3>🏦 적금 내역</H3>
+      {sv.loading && !sv.data ? <Loading /> : <SavingsList rows={(sv.data && sv.data.rows) || []} />}
+    </>
+  );
+}
 
 function oneLine(r) {
   const inv = String(r.inv_text || "").trim();
@@ -110,6 +121,7 @@ function StudentDetail({ sid, onChanged }) {
           <DataTable rows={txRowsView(rows)} columns={TX_COLUMNS} csvName="통장내역" />
         </>
       ) : null}
+      <SavingsOf sid={sid} />
     </>
   );
 }

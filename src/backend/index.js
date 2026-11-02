@@ -5,8 +5,25 @@ import { buildCtx, ApiError } from "./auth.js";
 import session from "./actions/session.js";
 import bank from "./actions/bank.js";
 import individual from "./actions/individual.js";
+import savings, { processMaturities } from "./actions/savings.js";
+import invest from "./actions/invest.js";
+import jobs, { runAutoPayroll } from "./actions/jobs.js";
 
-const ACTIONS = { ...session, ...bank, ...individual };
+const ACTIONS = { ...session, ...bank, ...individual, ...savings, ...invest, ...jobs };
+
+// 자동 처리(적금 만기 지급 + 월급 자동지급): 로그인·새로고침 때 시도 (1분에 한 번까지)
+async function runAuto() {
+  try {
+    await processMaturities();
+  } catch (e) {
+    console.error("적금 만기 자동 처리 실패", e);
+  }
+  try {
+    await runAutoPayroll();
+  } catch (e) {
+    console.error("월급 자동지급 실패", e);
+  }
+}
 const NO_LOGIN = new Set(["login", "admin_status", "admin_setup", "session"]);
 
 function friendly(e) {
@@ -28,6 +45,7 @@ export async function callAction(action, args, session) {
     const ctx = await buildCtx(session);
     // 저장된 로그인이 더 이상 유효하지 않음(비밀번호 변경·계정 삭제) → 화면에서 바로 로그아웃
     if (session && !ctx.role && !NO_LOGIN.has(action)) return { ok: false, auth_lost: true, error: "로그인이 풀렸어요. 다시 로그인해 주세요." };
+    if ((action === "session" && ctx.role) || action === "login") await runAuto();
     const out = await fn(ctx, args || {});
     return { ok: true, ...(out || {}) };
   } catch (e) {
