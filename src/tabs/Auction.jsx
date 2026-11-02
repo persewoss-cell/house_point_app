@@ -1,0 +1,229 @@
+// 🏷️ 경매
+import React, { useState } from "react";
+import { api } from "../lib/api.js";
+import { downloadExcel } from "../lib/excel.js";
+import { useApp, useLoad, Cols, H3, Caption, Btn, TextInput, Select, NumberInput, Checkbox, Info, Warning, ErrorBox, Success, DataTable, Loading, ConfirmModal } from "../components/ui.jsx";
+
+const BID_COLS = ["입찰 가격", "입찰일시", "이름"];
+const pad2 = (n) => String(n).padStart(2, "0");
+
+function RefundApply({ roundId, withDownload, bids, roundNo, onDone, guide }) {
+  const app = useApp();
+  const [no, setNo] = useState(false);
+  const [yes, setYes] = useState(false);
+  const [warn, setWarn] = useState("");
+  const [err, setErr] = useState("");
+  const apply = async () => {
+    setWarn("");
+    setErr("");
+    if (!no && !yes) return setWarn("낙찰금 반환 여부를 선택 후 장부 반영 버튼을 눌러 주세요");
+    const r = await api("auction_apply", { round_id: roundId, refund: yes });
+    if (r.ok) {
+      app.toast(yes ? `경매 관리 장부 반영 완료 · 반환 ${r.refunded_count}명 / ${r.refunded_total}포인트` : "경매 관리 장부 반영 완료", "📒");
+      onDone();
+    } else setErr(r.error || "장부 반영 실패");
+  };
+  // 순서 안내(guide): 반환 여부 두 칸이 번갈아 반짝 → 고르면 장부반영 버튼이 반짝
+  const chosen = no || yes;
+  const boxes = [
+    <span key="n" className={`neon-wrap ${guide && !chosen ? "neon-a" : ""}`}>
+      <Checkbox label="낙찰금 미반환" checked={no} onChange={(v) => { setNo(v); if (v) setYes(false); }} />
+    </span>,
+    <span key="y" className={`neon-wrap ${guide && !chosen ? "neon-b" : ""}`}>
+      <Checkbox label="낙찰금 반환(반환액 90%)" checked={yes} onChange={(v) => { setYes(v); if (v) setNo(false); }} />
+    </span>,
+    <Btn key="b" className={guide && chosen ? "neon" : ""} onClick={apply}>
+      장부반영
+    </Btn>,
+  ];
+  return (
+    <>
+      {withDownload ? (
+        <Cols w={[1.2, 0.9, 1.2, 1.2]} va="center">
+          <Btn className="dl" onClick={() => downloadExcel(`auction_result_${pad2(roundNo)}.xlsx`, [{ name: "경매결과", columns: BID_COLS, rows: bids }])}>
+            엑셀저장
+          </Btn>
+          {boxes}
+        </Cols>
+      ) : (
+        <Cols w={3} va="center">
+          {boxes}
+        </Cols>
+      )}
+      {warn ? <Warning>{warn}</Warning> : null}
+      <ErrorBox>{err}</ErrorBox>
+    </>
+  );
+}
+
+function AuctionAdmin() {
+  const app = useApp();
+  const [pickId, setPickId] = useState("");
+  const { data, error, reload } = useLoad("auction_admin_load", { pick_round_id: pickId }, [app.ver, pickId]);
+  const [bidName, setBidName] = useState("");
+  const [err, setErr] = useState("");
+  const [askClose, setAskClose] = useState(false);
+  if (error) return <ErrorBox>{error}</ErrorBox>;
+  if (!data) return <Loading />;
+  const open = async () => {
+    setErr("");
+    const r = await api("auction_open", { bid_title: bidName });
+    if (r.ok) {
+      app.toast(`경매 ${pad2(r.round_no)}회차 개시`, "🏁");
+      setBidName("");
+      reload();
+    } else setErr(r.error || "경매 개시 실패");
+  };
+  const close = async () => {
+    setErr("");
+    const r = await api("auction_close", {});
+    if (r.ok) {
+      app.toast("경매 마감 완료", "✅");
+      reload();
+    } else setErr(r.error || "경매 마감 실패");
+  };
+  const picked = data.closed.find((r) => r.round_id === pickId);
+  // 순서 안내: 개시 → 마감 → (낙찰금 미반환 ↔ 반환) → 장부반영. 지금 눌러야 할 것만 반짝
+  const pendingLedger = !data.open && data.latest && !data.latest.ledger_reflected && (data.latest.bids || []).length > 0;
+  const pickLabel = (r) => `${pad2(r.round_no)}회 | ${r.bid_title}`;
+  return (
+    <>
+      <H3>📢 경매 개시</H3>
+      <Cols w={[4, 0.8, 0.8]} va="bottom">
+        <TextInput label="입찰 내역" value={bidName} onChange={setBidName} />
+        <Btn className={data.open || pendingLedger ? "" : "neon"} onClick={open}>
+          개시
+        </Btn>
+        <Btn className={data.open ? "neon" : ""} onClick={() => setAskClose(true)}>
+          마감
+        </Btn>
+      </Cols>
+      <ConfirmModal
+        open={askClose}
+        title="🏷️ 경매 마감"
+        message={data.open ? `진행 중인 ${pad2(data.open.round_no)}회 경매(${data.open.bid_title})를 마감할까요?` : "진행 중인 경매를 마감할까요?"}
+        yesText="마감"
+        onYes={async () => {
+          setAskClose(false);
+          await close();
+        }}
+        onNo={() => setAskClose(false)}
+      />
+      <ErrorBox>{err}</ErrorBox>
+      {data.open ? <Success>{`진행 중: 입찰번호 ${pad2(data.open.round_no)} | 입찰이름 ${data.open.bid_title}`}</Success> : <Info>개시된 경매가 없습니다.</Info>}
+
+      <H3>📊 경매 결과</H3>
+      {data.open ? (
+        <Info>경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.</Info>
+      ) : !data.latest ? (
+        <Info>마감된 경매가 없습니다.</Info>
+      ) : data.latest.ledger_reflected ? (
+        <Info>경매 마감 버튼을 눌러야 경매 결과가 표시됩니다.</Info>
+      ) : (
+        <>
+          <Caption>{`최근 마감 경매: ${pad2(data.latest.round_no)}회 | 입찰이름: ${data.latest.bid_title}`}</Caption>
+          {data.latest.bids.length ? (
+            <>
+              <DataTable rows={data.latest.bids} columns={BID_COLS} csvName="경매결과" />
+              <RefundApply roundId={data.latest.round_id} withDownload bids={data.latest.bids} roundNo={data.latest.round_no} onDone={() => app.refresh()} guide />
+            </>
+          ) : (
+            <Info>제출된 입찰표가 없습니다.</Info>
+          )}
+        </>
+      )}
+
+      {data.closed.length ? (
+        <>
+          <Select
+            label="🔎 마감된 경매 결과 조회"
+            value={pickId ? pickLabel(picked || { round_no: 0, bid_title: "" }) : "(선택없음)"}
+            options={["(선택없음)", ...data.closed.map(pickLabel)]}
+            onChange={(v) => {
+              const r = data.closed.find((x) => pickLabel(x) === v);
+              setPickId(r ? r.round_id : "");
+            }}
+          />
+          {pickId && picked ? (
+            <>
+              {(data.picked_bids || []).length ? <DataTable rows={data.picked_bids} columns={BID_COLS} csvName="경매결과" /> : <Info>선택한 회차에 제출된 입찰표가 없습니다.</Info>}
+              {picked.ledger_reflected ? (
+                <Caption>✅ 이미 장부 반영된 경매입니다.</Caption>
+              ) : (data.picked_bids || []).length ? (
+                <>
+                  <Warning>⚠️ 이 회차는 아직 장부 반영이 완료되지 않았습니다.</Warning>
+                  <RefundApply key={pickId} roundId={pickId} onDone={() => app.refresh()} />
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      ) : (
+        <Info>조회 가능한 마감 경매가 없습니다.</Info>
+      )}
+
+      <H3>📚 경매 관리 장부</H3>
+      {data.ledger.length ? <DataTable rows={data.ledger} csvName="경매관리장부" /> : <Info>아직 반영된 경매 관리 장부가 없습니다.</Info>}
+    </>
+  );
+}
+
+function AuctionUser() {
+  const app = useApp();
+  const { data, error } = useLoad("auction_user_load", {}, [app.ver]);
+  const [amt, setAmt] = useState(0);
+  const [confirm, setConfirm] = useState(false);
+  const [warn, setWarn] = useState("");
+  const [err, setErr] = useState("");
+  if (error) return <ErrorBox>{error}</ErrorBox>;
+  if (!data) return <Loading />;
+  const o = data.open;
+  const submit = async () => {
+    setWarn("");
+    setErr("");
+    setConfirm(false);
+    const r = await api("auction_bid", { amount: amt });
+    if (r.ok) {
+      app.toast("입찰표 제출 완료! 제출 즉시 통장에서 차감되었습니다.", "✅");
+      app.refresh();
+    } else setErr(r.error || "입찰표 제출 실패");
+  };
+  return (
+    <>
+      <H3>📝 입찰표</H3>
+      {!o ? (
+        <Info>개시된 경매가 없습니다.</Info>
+      ) : (
+        <div className="md">
+          <div>• 입찰기일: {o.opened_text}</div>
+          <div>• 입찰번호: {pad2(o.round_no)}</div>
+          <div>• 입찰이름: {o.bid_title}</div>
+          <div>{`• 입찰자 정보: 입찰자 ${data.me.name}`}</div>
+        </div>
+      )}
+      <H3>✋경매 참여하기</H3>
+      {!o ? (
+        <Info>개시된 경매가 없습니다.</Info>
+      ) : data.prev ? (
+        <Success>{`입찰표 제출 완료: ${Number(data.prev.amount).toLocaleString("en-US")} 포인트 | 제출시각 ${data.prev.submitted_text}`}</Success>
+      ) : (
+        <>
+          <Cols w={[2, 1]} va="bottom">
+            <NumberInput label="입찰 가격(포인트)" min={0} value={amt} onChange={setAmt} />
+            <Btn onClick={() => setConfirm(true)}>📝 입찰표 제출</Btn>
+          </Cols>
+          <ConfirmModal open={confirm} title="🏷️ 입찰표 제출" message={`${Number(amt || 0).toLocaleString("en-US")} 포인트로 입찰표를 제출할까요?`} onYes={submit} onNo={() => setConfirm(false)}>
+            <div className="caption center">제출하면 바로 통장에서 빠져나가고, 다시 고칠 수 없어요.</div>
+          </ConfirmModal>
+          {warn ? <Warning>{warn}</Warning> : null}
+          <ErrorBox>{err}</ErrorBox>
+        </>
+      )}
+    </>
+  );
+}
+
+export default function Auction() {
+  const app = useApp();
+  return app.user && app.user.role === "admin" ? <AuctionAdmin /> : <AuctionUser />;
+}
