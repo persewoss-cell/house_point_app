@@ -4,7 +4,7 @@ import {
   ADMIN_NAME, ADMIN_AUTH_DOC, fail, pinOk, adminPinOk, isAdminPin, getAdminAuth, hashAdminPin, pinVersion,
   authStudent, findStudentByName, requireLogin, requireStudent, requireAdmin, sha256,
 } from "../auth.js";
-import { loadRoleLookup, roleNameFor, investSummaryFor, savingsTotalFor, getOne } from "../core.js";
+import { loadRoleLookup, roleNameFor, investSummaryFor, savingsTotalFor, getOne, activeStudents } from "../core.js";
 import { str, toInt } from "../../shared/format.js";
 
 const ADMIN_USER = { role: "admin", name: ADMIN_NAME, sid: "", perms: ["admin_all"], invest_enabled: true };
@@ -124,6 +124,18 @@ export default {
       return {};
     }
     fail("잘못된 요청입니다.");
+  },
+
+  // [관리자] 가족 계정과 비밀번호 목록 보기 (관리자 비밀번호로 한 번 더 확인)
+  async accounts_pins(ctx, { admin_pin }) {
+    requireAdmin(ctx);
+    if (!str(admin_pin).trim()) fail("관리자 비밀번호를 입력해 주세요.");
+    if (!(await isAdminPin(admin_pin))) fail("관리자 비밀번호가 틀립니다.");
+    const rows = (await activeStudents())
+      .filter((s) => str(s.name).trim())
+      .map((s) => ({ 이름: str(s.name).trim(), 비밀번호: str(s.pin), 잔액: toInt(s.balance) }))
+      .sort((a, b) => a.이름.localeCompare(b.이름, "ko"));
+    return { rows };
   },
 
   // 가족 화면 위 요약 (기존 사용자 화면 상단 요약)
