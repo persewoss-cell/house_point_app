@@ -1,7 +1,7 @@
 // 팝업: [가족] 비밀번호 변경 / [관리자] 계정생성·PIN변경·삭제·관리자 비밀번호 변경 (예전 사이드바 내용)
 import React, { useState } from "react";
 import { api, setToken, remember } from "../lib/api.js";
-import { useApp, TextInput, Btn, Cols, ErrorBox, ConfirmModal, Popup } from "./ui.jsx";
+import { useApp, TextInput, Btn, Cols, ErrorBox, ConfirmModal, Popup, Info } from "./ui.jsx";
 
 // 가족: 로그인한 본인 비밀번호 변경 (이 기기는 로그인 유지, 다른 기기는 로그아웃)
 export function StudentPinModal({ open, onClose }) {
@@ -88,6 +88,20 @@ export function AdminAccountModal({ open, onClose }) {
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [delAsk, setDelAsk] = useState(false);
+  const [list, setList] = useState(null); // 계정·비밀번호 목록 (보기 누를 때만)
+  const close = () => {
+    setList(null);
+    setErr("");
+    onClose();
+  };
+  const showList = async () => {
+    setErr("");
+    if (list) return setList(null);
+    if (!aPin.trim()) return setErr("관리자 비밀번호를 입력해 주세요.");
+    const r = await api("accounts_pins", { admin_pin: aPin });
+    if (!r.ok) return setErr(r.error || "불러오기 실패");
+    setList(r.rows || []);
+  };
   const op = async (kind) => {
     setErr("");
     setDelAsk(false);
@@ -99,21 +113,59 @@ export function AdminAccountModal({ open, onClose }) {
     if (kind === "delete") app.toast("삭제 완료!", "🗑️");
     setName("");
     setPin("");
+    if (list) {
+      const r2 = await api("accounts_pins", { admin_pin: aPin });
+      if (r2.ok) setList(r2.rows || []);
+    }
     app.refresh();
   };
   return (
-    <Popup open={open} title="🔐 계정 관리 (계정생성 / PIN변경 / 삭제 / 관리자 비밀번호)" onClose={onClose}>
+    <Popup open={open} title="🔐 계정 관리 (계정생성 / PIN변경 / 삭제 / 관리자 비밀번호)" onClose={close}>
       <Cols w={3}>
         <TextInput label="관리자 비밀번호" type="password" value={aPin} onChange={setAPin} />
         <TextInput label="이름(계정)" value={name} onChange={setName} />
         <TextInput label="가족 비밀번호(4자리 숫자)" type="password" value={pin} onChange={setPin} />
       </Cols>
-      <Cols w={3}>
+      <Cols w={4}>
         <Btn onClick={() => op("create")}>➕ 계정 생성</Btn>
         <Btn onClick={() => op("pin")}>🔁 PIN 변경</Btn>
         <Btn onClick={() => setDelAsk(true)}>🗑️ 삭제</Btn>
+        <Btn onClick={showList}>{list ? "🙈 목록 숨기기" : "👀 계정·비밀번호 보기"}</Btn>
       </Cols>
       <ErrorBox>{err}</ErrorBox>
+      {list ? (
+        list.length ? (
+          <>
+            <div className="caption">이름을 누르면 위 '이름(계정)' 칸에 들어가요. (다 보고 나면 꼭 숨기기를 눌러 주세요)</div>
+            <div className="tbl-wrap">
+              <div className="tbl-scroll" style={{ maxHeight: 320 }}>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>이름</th>
+                      <th>비밀번호</th>
+                      <th>잔액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((r) => (
+                      <tr key={r.이름} onClick={() => setName(r.이름)} style={{ cursor: "pointer" }}>
+                        <td>{r.이름}</td>
+                        <td>
+                          <b>{r.비밀번호}</b>
+                        </td>
+                        <td>{r.잔액}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        ) : (
+          <Info>등록된 가족 계정이 없어요.</Info>
+        )
+      ) : null}
       <AdminPinChange />
       <ConfirmModal open={delAsk} title="🗑️ 계정 삭제" message={`'${name || "(이름 없음)"}' 계정을 삭제할까요?`} onYes={() => op("delete")} onNo={() => setDelAsk(false)} />
     </Popup>
